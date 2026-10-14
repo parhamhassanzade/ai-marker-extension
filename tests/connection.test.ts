@@ -19,7 +19,10 @@ beforeEach(() => {
   inject = vi.fn().mockResolvedValue([]);
   query = vi.fn().mockResolvedValue([{ id: 7, url: 'https://chatgpt.com/c/c' }]);
   vi.stubGlobal('chrome', {
-    runtime: { getManifest: () => ({ version: '2.3.0' }) },
+    runtime: {
+      getManifest: () => ({ version: '2.4.1' }),
+      getURL: (path: string) => `chrome-extension://test${path}`,
+    },
     tabs: { sendMessage: send, query },
     scripting: { executeScript: inject },
   });
@@ -30,7 +33,7 @@ it('injects into a supported already-open tab when no content script is connecte
   expect(inject).toHaveBeenCalledWith({ target: { tabId: 7 }, files: ['content.js'] });
 });
 it('does not inject an already connected current-version script', async () => {
-  send.mockResolvedValue({ version: '2.3.0' });
+  send.mockResolvedValue({ version: '2.4.1' });
   await ensureContentScript(7);
   expect(inject).not.toHaveBeenCalled();
 });
@@ -45,4 +48,34 @@ it('does not inject into unsupported or non-HTTPS pages', async () => {
   expect(inject).not.toHaveBeenCalled();
   expect(isSupportedUrl('http://chatgpt.com/c/x')).toBe(false);
   expect(isSupportedUrl('https://chatgpt.com.evil.example/c/x')).toBe(false);
+});
+
+it('reads the originating window when the notebook is opened in an Arc popup', async () => {
+  const previous = location.href;
+  history.replaceState({}, '', '?sourceWindow=12&sourceTab=7');
+  try {
+    send.mockResolvedValueOnce({ version: '2.4.1' }).mockResolvedValueOnce(snapshot);
+    expect((await currentConversation()).tabId).toBe(7);
+    expect(query).toHaveBeenCalledWith({ active: true, windowId: 12 });
+  } finally {
+    history.replaceState({}, '', previous);
+  }
+});
+
+it('keeps the original chat connected when a fallback notebook tab is active', async () => {
+  const previous = location.href;
+  history.replaceState({}, '', '?sourceWindow=12&sourceTab=7');
+  const get = vi.fn().mockResolvedValue({ id: 7, url: snapshot.website });
+  Object.assign(chrome.runtime, { getURL: (path: string) => `chrome-extension://test${path}` });
+  Object.assign(chrome.tabs, { get });
+  query.mockResolvedValue([
+    { id: 9, url: 'chrome-extension://test/sidepanel.html?sourceWindow=12&sourceTab=7' },
+  ]);
+  send.mockResolvedValueOnce({ version: '2.4.1' }).mockResolvedValueOnce(snapshot);
+  try {
+    expect((await currentConversation()).tabId).toBe(7);
+    expect(get).toHaveBeenCalledWith(7);
+  } finally {
+    history.replaceState({}, '', previous);
+  }
 });

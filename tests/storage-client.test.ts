@@ -7,9 +7,7 @@ afterEach(() => vi.unstubAllGlobals());
 it('explains the reload required when a new toolbar connects to an older worker', async () => {
   const sendMessage = vi.fn().mockResolvedValue({ ok: false, error: 'Invalid notebook request.' });
   vi.stubGlobal('chrome', { runtime: { id: 'extension', sendMessage } });
-  await expect(storage.saveSourceHighlight(snapshot, highlight)).rejects.toThrow(
-    'chrome://extensions',
-  );
+  await expect(storage.saveSourceHighlight(snapshot, highlight)).rejects.toThrow('extensions page');
   expect(sendMessage).toHaveBeenCalledExactlyOnceWith({ type: 'capabilities' });
 });
 it('saves the source highlight when the worker supports the toolbar protocol', async () => {

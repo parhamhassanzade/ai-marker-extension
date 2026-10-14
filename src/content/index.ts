@@ -1,3 +1,4 @@
+import { extension } from '../browser/api';
 import { startSourceHighlighter } from './sourceHighlighter';
 import { storage } from '../storage/storage';
 import { detectAdapter, snapshotOf } from '../adapters';
@@ -59,7 +60,7 @@ function startCapture(adapter: AIPlatformAdapter): () => void {
     } catch (error) {
       lastCaptureError = error instanceof Error ? error.message : 'Could not update the notebook.';
       console.warn('[AI Notebook]', error);
-      void chrome.runtime
+      void extension.runtime
         .sendMessage({ type: 'captureError', error: lastCaptureError })
         .catch(() => undefined);
     } finally {
@@ -91,14 +92,14 @@ function startCapture(adapter: AIPlatformAdapter): () => void {
     respond: (response: unknown) => void,
   ) => {
     if (
-      sender.id !== chrome.runtime.id ||
+      sender.id !== extension.runtime.id ||
       typeof message !== 'object' ||
       !message ||
       !('type' in message)
     )
       return false;
     if (message.type === 'ping') {
-      respond({ version: chrome.runtime.getManifest().version });
+      respond({ version: extension.runtime.getManifest().version });
       return false;
     }
     if (message.type === 'cancelHistory') {
@@ -140,7 +141,7 @@ function startCapture(adapter: AIPlatformAdapter): () => void {
     }
     return false;
   };
-  chrome.runtime.onMessage.addListener(onMessage);
+  extension.runtime.onMessage.addListener(onMessage);
   // Discover persisted activation on reload. sync will never create a notebook.
   void capture(true);
   return () => {
@@ -152,7 +153,7 @@ function startCapture(adapter: AIPlatformAdapter): () => void {
     observer.disconnect();
     try {
       unsubscribe();
-      chrome.runtime.onMessage.removeListener(onMessage);
+      extension.runtime.onMessage.removeListener(onMessage);
     } catch {
       /* An extension reload invalidates the old runtime context. */
     }
@@ -161,7 +162,7 @@ function startCapture(adapter: AIPlatformAdapter): () => void {
 const state = globalThis as typeof globalThis & {
   __aiNotebookCapture?: { owner: string; alive(): boolean; dispose(): void };
 };
-const owner = `${chrome.runtime.id}:${chrome.runtime.getManifest().version}`;
+const owner = `${extension.runtime.id}:${extension.runtime.getManifest().version}`;
 const previous = state.__aiNotebookCapture;
 if (!previous || previous.owner !== owner || !previous.alive()) {
   previous?.dispose();
@@ -169,7 +170,7 @@ if (!previous || previous.owner !== owner || !previous.alive()) {
   if (adapter)
     state.__aiNotebookCapture = {
       owner,
-      alive: () => !!chrome.runtime.id,
+      alive: () => !!extension.runtime.id,
       dispose: startCapture(adapter),
     };
 }

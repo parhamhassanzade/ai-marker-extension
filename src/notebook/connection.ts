@@ -1,3 +1,4 @@
+import { extension } from '../browser/api';
 import type { ConversationSnapshot } from '../types';
 export function isSupportedUrl(url?: string): boolean {
   try {
@@ -11,9 +12,9 @@ export function isSupportedUrl(url?: string): boolean {
 }
 const injections = new Map<number, Promise<void>>();
 export async function ensureContentScript(tabId: number): Promise<void> {
-  const version = chrome.runtime.getManifest().version;
+  const version = extension.runtime.getManifest().version;
   try {
-    const pong = await chrome.tabs.sendMessage<{ type: string }, { version: string }>(tabId, {
+    const pong = await extension.tabs.sendMessage<{ type: string }, { version: string }>(tabId, {
       type: 'ping',
     });
     if (pong?.version === version) return;
@@ -22,7 +23,7 @@ export async function ensureContentScript(tabId: number): Promise<void> {
   }
   let pending = injections.get(tabId);
   if (!pending) {
-    pending = chrome.scripting
+    pending = extension.scripting
       .executeScript({ target: { tabId }, files: ['content.js'] })
       .then(() => undefined)
       .finally(() => injections.delete(tabId));
@@ -36,23 +37,35 @@ export async function ensureContentScript(tabId: number): Promise<void> {
 }
 export async function conversationFromTab(tabId: number): Promise<ConversationSnapshot> {
   await ensureContentScript(tabId);
-  const snapshot = await chrome.tabs.sendMessage<{ type: string }, ConversationSnapshot>(tabId, {
+  const snapshot = await extension.tabs.sendMessage<{ type: string }, ConversationSnapshot>(tabId, {
     type: 'context',
   });
   if (!snapshot?.platform || !Array.isArray(snapshot.messages))
     throw new Error('No ChatGPT conversation was found on this page.');
   return snapshot;
 }
-export async function currentConversation(): Promise<{
-  tabId: number;
-  snapshot: ConversationSnapshot;
-}> {
-  const tab = (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
+export async function currentSourceTab(): Promise<chrome.tabs.Tab> {
+  const windowId = new URLSearchParams(location.search).get('sourceWindow');
+  const query =
+    windowId && /^\d+$/.test(windowId)
+      ? { active: true, windowId: Number(windowId) }
+      : { active: true, currentWindow: true };
+  let tab = (await extension.tabs.query(query))[0];
+  const sourceTab = new URLSearchParams(location.search).get('sourceTab');
+  if (sourceTab && /^\d+$/.test(sourceTab) && tab?.url?.startsWith(extension.runtime.getURL('/')))
+    tab = await extension.tabs.get(Number(sourceTab));
   if (!tab?.id || !isSupportedUrl(tab.url))
     throw new Error(
       'No ChatGPT conversation was found on this page. Open a conversation on chatgpt.com.',
     );
-  return { tabId: tab.id, snapshot: await conversationFromTab(tab.id) };
+  return tab;
+}
+export async function currentConversation(): Promise<{
+  tabId: number;
+  snapshot: ConversationSnapshot;
+}> {
+  const tab = await currentSourceTab();
+  return { tabId: tab.id!, snapshot: await conversationFromTab(tab.id!) };
 }
 export async function waitForLoadedMessages(tabId: number): Promise<ConversationSnapshot> {
   let snapshot = await conversationFromTab(tabId);

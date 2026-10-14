@@ -1,9 +1,10 @@
+import { extension, isExtensionContext } from '../browser/api';
 import type { Command, ConversationSnapshot, Database, Highlight, Result } from '../types';
 export const STORAGE_KEY = 'aiMarker.v1';
 async function request(command: Command): Promise<Database> {
-  if (!globalThis.chrome?.runtime?.id)
-    throw new Error('Open AI Notebook from the installed Chrome extension.');
-  const result = await chrome.runtime.sendMessage<Command, Result>(command);
+  if (!isExtensionContext())
+    throw new Error('Open AI Notebook from the installed browser extension.');
+  const result = await extension.runtime.sendMessage<Command, Result>(command);
   if (!result?.ok)
     throw new Error(
       result?.error ||
@@ -15,11 +16,11 @@ export const storage = {
   async saveSourceHighlight(snapshot: ConversationSnapshot, highlight: Highlight) {
     // Rebuilding an unpacked extension changes files immediately, but Chrome can
     // keep the old worker alive while injecting the new content script from disk.
-    const capabilities = (await chrome.runtime.sendMessage({ type: 'capabilities' })) as
+    const capabilities = (await extension.runtime.sendMessage({ type: 'capabilities' })) as
       { sourceHighlights?: boolean } | undefined;
     if (!capabilities?.sourceHighlights)
       throw new Error(
-        'AI Notebook needs an update reload. Open chrome://extensions, click Reload on AI Notebook, then reload this ChatGPT tab and select the sentence again.',
+        'AI Notebook needs an update reload. Reload AI Notebook on your browser’s extensions page, then reload this ChatGPT tab and select the sentence again.',
       );
     return request({ type: 'sourceHighlight', snapshot, highlight });
   },
@@ -54,7 +55,7 @@ export const storage = {
       respond: (response: unknown) => void,
     ) => {
       if (
-        sender.id === chrome.runtime.id &&
+        sender.id === extension.runtime.id &&
         typeof message === 'object' &&
         message !== null &&
         'type' in message &&
@@ -65,11 +66,11 @@ export const storage = {
       }
       return false;
     };
-    chrome.runtime.onMessage.addListener(messageListener);
-    chrome.storage.onChanged.addListener(listener);
+    extension.runtime.onMessage.addListener(messageListener);
+    extension.storage.onChanged.addListener(listener);
     return () => {
-      chrome.storage.onChanged.removeListener(listener);
-      chrome.runtime.onMessage.removeListener(messageListener);
+      extension.storage.onChanged.removeListener(listener);
+      extension.runtime.onMessage.removeListener(messageListener);
     };
   },
 };

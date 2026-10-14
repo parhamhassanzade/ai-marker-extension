@@ -45,6 +45,8 @@ beforeEach(async () => {
     sidePanel: { setPanelBehavior: async () => undefined },
     runtime: {
       id: 'test-extension',
+      getManifest: () => ({ side_panel: {} }),
+      getURL: (path: string) => `chrome-extension://test-extension${path}`,
       sendMessage: async () => ({ ok: true }),
       onMessage: {
         addListener: (fn: typeof listener) => {

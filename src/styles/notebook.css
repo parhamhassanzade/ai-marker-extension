@@ -562,3 +562,26 @@ footer {
   color: var(--muted);
   margin: 9px 0 0;
 }
+
+.notebook-popup {
+  width: 420px;
+  min-height: 580px;
+}
+.keep-open-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--accent);
+  background: var(--surface);
+  cursor: pointer;
+}
+.keep-open-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

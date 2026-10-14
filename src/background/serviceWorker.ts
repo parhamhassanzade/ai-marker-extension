@@ -1,3 +1,5 @@
+import { extension } from '../browser/api';
+import { configureNotebookSurface } from './notebookSurface';
 import { matchesHighlightSource } from './sourceAuthorization';
 import { isCommand } from '../storage/validation';
 import { STORAGE_KEY } from '../storage/storage';
@@ -8,7 +10,8 @@ let queue: Promise<unknown> = Promise.resolve();
 async function loadDatabase(): Promise<Database> {
   const existing = await readDatabase();
   if (existing) return existing;
-  const legacy = (await chrome.storage.local.get(STORAGE_KEY))[STORAGE_KEY] as Database | undefined;
+  const legacy = (await extension.storage.local.get(STORAGE_KEY))[STORAGE_KEY] as
+    Database | undefined;
   if (legacy && (legacy.version !== 1 || !Array.isArray(legacy.notebooks)))
     throw new Error(
       'The existing AI Marker archive could not be migrated. Its data has been preserved.',
@@ -26,17 +29,17 @@ async function loadDatabase(): Promise<Database> {
   });
   await writeDatabase(initial);
   // Delete the old large blob only after the IndexedDB transaction is durable.
-  if (legacy) await chrome.storage.local.remove(STORAGE_KEY);
-  await chrome.storage.local.set({ 'aiNotebook.migrated': true });
+  if (legacy) await extension.storage.local.remove(STORAGE_KEY);
+  await extension.storage.local.set({ 'aiNotebook.migrated': true });
   return initial;
 }
 async function notifyViews() {
-  await chrome.runtime.sendMessage({ type: 'notebooksChanged' }).catch(() => undefined);
-  const tabs = await chrome.tabs.query({});
+  await extension.runtime.sendMessage({ type: 'notebooksChanged' }).catch(() => undefined);
+  const tabs = await extension.tabs.query({});
   await Promise.allSettled(
     tabs
       .filter((tab) => tab.id !== undefined)
-      .map((tab) => chrome.tabs.sendMessage(tab.id!, { type: 'notebooksChanged' })),
+      .map((tab) => extension.tabs.sendMessage(tab.id!, { type: 'notebooksChanged' })),
   );
 }
 async function execute(command: Command): Promise<Result> {
@@ -59,8 +62,8 @@ async function execute(command: Command): Promise<Result> {
     };
   }
 }
-chrome.runtime.onMessage.addListener((command: unknown, sender, respond) => {
-  if (sender.id !== chrome.runtime.id) return false;
+extension.runtime.onMessage.addListener((command: unknown, sender, respond) => {
+  if (sender.id !== extension.runtime.id) return false;
   if (
     typeof command === 'object' &&
     command &&
@@ -84,7 +87,7 @@ chrome.runtime.onMessage.addListener((command: unknown, sender, respond) => {
   }
   if (
     sender.tab &&
-    !sender.url?.startsWith(`chrome-extension://${chrome.runtime.id}/`) &&
+    !sender.url?.startsWith(extension.runtime.getURL('/')) &&
     !['sync', 'list', 'sourceHighlight'].includes(command.type)
   ) {
     respond({
@@ -97,7 +100,7 @@ chrome.runtime.onMessage.addListener((command: unknown, sender, respond) => {
     if (sender.tab && command.type === 'sourceHighlight') {
       try {
         if (sender.tab.id === undefined) throw new Error('Missing source tab');
-        const tab = await chrome.tabs.get(sender.tab.id);
+        const tab = await extension.tabs.get(sender.tab.id);
         if (!matchesHighlightSource(command.snapshot, sender, tab.url))
           throw new Error('Source changed');
       } catch {
@@ -114,5 +117,7 @@ chrome.runtime.onMessage.addListener((command: unknown, sender, respond) => {
   void task.then(respond);
   return true;
 });
-void chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' }).catch(console.error);
-void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(console.error);
+void extension.storage.local
+  .setAccessLevel?.({ accessLevel: 'TRUSTED_CONTEXTS' })
+  .catch(console.error);
+configureNotebookSurface();

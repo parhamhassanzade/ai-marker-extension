@@ -1,3 +1,5 @@
+import { openNotebookWindow } from '../browser/notebookWindow';
+import { extension, isExtensionContext } from '../browser/api';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   BookOpen,
@@ -19,12 +21,17 @@ import { conversationKey } from '../storage/repository';
 import { chaptersOf } from './chapters';
 import {
   currentConversation,
+  currentSourceTab,
   conversationFromTab,
   waitForLoadedMessages,
   ensureContentScript,
 } from './connection';
 import { NotebookView } from './NotebookView';
 export default function App() {
+  const isToolbarPopup =
+    isExtensionContext() &&
+    !!extension.runtime.getManifest().action?.default_popup &&
+    !new URLSearchParams(location.search).has('sourceWindow');
   const [db, setDb] = useState<Database>();
   const [context, setContext] = useState<ConversationSnapshot>();
   const [selected, setSelected] = useState('');
@@ -69,9 +76,9 @@ export default function App() {
     }
   }, []);
   useEffect(() => {
-    if (!globalThis.chrome?.runtime?.id) {
+    if (!isExtensionContext()) {
       setLoading(false);
-      setError('Install AI Notebook in Chrome or Edge to use the notebook side panel.');
+      setError('Install AI Notebook in your browser to open your notebook.');
       return;
     }
     void load();
@@ -92,7 +99,7 @@ export default function App() {
     };
     const captureError = (message: unknown, sender: chrome.runtime.MessageSender) => {
       if (
-        sender.id === chrome.runtime.id &&
+        sender.id === extension.runtime.id &&
         sender.tab?.id === tabId.current &&
         typeof message === 'object' &&
         message &&
@@ -103,18 +110,18 @@ export default function App() {
         setError(String(message.error));
       return false;
     };
-    chrome.runtime.onMessage.addListener(captureError);
-    chrome.tabs.onActivated.addListener(activated);
-    chrome.tabs.onUpdated.addListener(updated);
+    extension.runtime.onMessage.addListener(captureError);
+    extension.tabs.onActivated.addListener(activated);
+    extension.tabs.onUpdated.addListener(updated);
     const poll = setInterval(() => {
       void refreshContext();
     }, 1500);
     return () => {
       unsubscribe();
-      chrome.runtime.onMessage.removeListener(captureError);
+      extension.runtime.onMessage.removeListener(captureError);
       clearInterval(poll);
-      chrome.tabs.onActivated.removeListener(activated);
-      chrome.tabs.onUpdated.removeListener(updated);
+      extension.tabs.onActivated.removeListener(activated);
+      extension.tabs.onUpdated.removeListener(updated);
     };
   }, [load, refreshContext]);
   useEffect(() => {
@@ -154,10 +161,10 @@ export default function App() {
   async function refreshCurrentConversation() {
     if (!tabId.current) return;
     await ensureContentScript(tabId.current);
-    const result = await chrome.tabs.sendMessage<{ type: string }, { ok: boolean; error?: string }>(
-      tabId.current,
-      { type: 'refreshConversation' },
-    );
+    const result = await extension.tabs.sendMessage<
+      { type: string },
+      { ok: boolean; error?: string }
+    >(tabId.current, { type: 'refreshConversation' });
     if (!result?.ok) throw new Error(result?.error || 'Could not refresh the conversation.');
   }
   async function activate() {
@@ -172,7 +179,7 @@ export default function App() {
     if (tabId.current) {
       setScanning(true);
       try {
-        const capture = await chrome.tabs.sendMessage<
+        const capture = await extension.tabs.sendMessage<
           { type: string },
           { ok: boolean; complete?: boolean; error?: string }
         >(tabId.current, { type: 'captureHistory' });
@@ -210,6 +217,19 @@ export default function App() {
           {dark ? <Sun size={18} /> : <Moon size={18} />}
         </button>
       </header>
+      {isToolbarPopup && (
+        <button
+          className="keep-open-button"
+          disabled={busy || !context}
+          onClick={() => {
+            void act(async () => {
+              await openNotebookWindow(await currentSourceTab());
+            });
+          }}
+        >
+          <ArrowUpRight size={16} /> Keep notebook open
+        </button>
+      )}
       <section className={`mode-card ${currentId ? 'mode-card-active' : ''}`}>
         <div className="mode-copy">
           <span className="eyebrow">YOUR PERSONAL STUDY SPACE</span>
@@ -272,7 +292,7 @@ export default function App() {
           className="text-button"
           onClick={() => {
             if (tabId.current)
-              void chrome.tabs.sendMessage(tabId.current, { type: 'cancelHistory' });
+              void extension.tabs.sendMessage(tabId.current, { type: 'cancelHistory' });
           }}
         >
           Stop history scan

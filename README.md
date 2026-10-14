@@ -1,6 +1,6 @@
 # AI Notebook
 
-AI Notebook is a Manifest V3 Chrome/Edge extension that turns a ChatGPT conversation into a personal study notebook. Activate Notebook Mode in the browser's side panel to collect full questions and answers into chapters. Highlight passages, add and edit notes beside them, continue chatting, and export the full notebook as a paginated PDF.
+AI Notebook is a Manifest V3 desktop browser extension for Chrome, Edge, Arc, and Firefox that turns a ChatGPT conversation into a personal study notebook. Activate Notebook Mode in the browser's side panel to collect full questions and answers into chapters. Highlight passages, add and edit notes beside them, continue chatting, and export the full notebook as a paginated PDF.
 
 ## Architecture plan
 
@@ -184,7 +184,7 @@ npm run test:e2e
 To test the installed build in Chrome:
 
 1. Build the project with `npm run build`.
-2. Open `chrome://extensions`, enable Developer mode, and load `dist` (or reload the existing AI Notebook card). Check that its version is **2.3.0**.
+2. Open `chrome://extensions`, enable Developer mode, and load `dist` (or reload the existing AI Notebook card). Check that its version is **2.4.1**.
 3. Open an existing ChatGPT conversation with these four messages: “What is machine learning?”, a complete answer, “What is supervised learning?”, and a complete answer containing “uses labeled data”.
 4. Click the extension icon and **Activate Notebook Mode**. Confirm **4 messages imported** and that both full question/answer chapters appear. No manual copying or adding messages is needed.
 5. Export before highlighting and confirm the full conversation is in the PDF.
@@ -214,7 +214,7 @@ Select a sentence directly in the main ChatGPT conversation. The floating toolba
 
 Highlights appear on the original page, survive reloads, and appear in the notebook and full PDF using the same colors. Remove a highlight or clear highlights from the notebook to remove its page color. Selections can span formatting and paragraphs within one message; select each message separately.
 
-After upgrading, rebuild with `npm run build`, reload AI Notebook in `chrome://extensions`, then reload the ChatGPT tab. The installed extension should show **2.3.0**. Run `npm run test:source` to check real mouse selection on the original page, notes, notebook persistence, reload restoration, PDF export, and clearing.
+After upgrading, rebuild with `npm run build`, reload AI Notebook in `chrome://extensions`, then reload the ChatGPT tab. The installed extension should show **2.4.1**. Run `npm run test:source` to check real mouse selection on the original page, notes, notebook persistence, reload restoration, PDF export, and clearing.
 
 Source colors use the CSS Custom Highlight API so ChatGPT's React-owned nodes remain intact. Conversation-local source saves are validated in the background worker and committed atomically with the corresponding message and annotation.
 
@@ -233,3 +233,47 @@ Export full PDF now supports Persian titles, questions, answers, highlights, and
 The extension bundles Noto Naskh Arabic alongside Noto Sans; font files load locally, so export works offline. Noto Naskh Arabic comes from the [official Noto repository](https://github.com/notofonts/noto-fonts/tree/main/hinted/ttf/NotoNaskhArabic) under the bundled `NotoNaskhArabic-OFL.txt` license. No notebook content is uploaded. PDF copy/search behavior for joined Arabic glyphs can vary by reader.
 
 Reload AI Notebook in `chrome://extensions`, confirm **2.3.0**, and reload ChatGPT before exporting. Run `npm run test:persian` for the browser download test with Persian text, all three highlight colors, mixed English terms, Persian numbers, multiple pages, and a Persian filename.
+
+## Arc and Firefox (2.4.0)
+
+`npm run build` produces these independent distributions:
+
+| Browser              | Load directory  | Notebook interface                                                    |
+| -------------------- | --------------- | --------------------------------------------------------------------- |
+| Chrome / Edge        | `dist`          | Native side panel                                                     |
+| Arc                  | `build/arc`     | Persistent notebook window attached to the originating browser window |
+| Firefox desktop 140+ | `build/firefox` | Native Firefox sidebar                                                |
+
+### Arc installation
+
+1. Open `arc://extensions`.
+2. Enable Developer mode, choose **Load unpacked**, and select `build/arc` in this project.
+3. Reload your ChatGPT tab. Click **AI Notebook** in Arc's extensions to open the notebook popup. You can also highlight on the ChatGPT page while the notebook window is closed.
+4. Click **Keep notebook open** to open a separate notebook window alongside your chat. Switching chats within the originating browser window updates its notebook context. The Keep notebook open button reuses the notebook window. If Arc rejects extension windows, it opens a notebook tab connected to the original chat.
+
+Arc uses its dedicated build so its action does not depend on Chrome's side-panel API. See [Arc's extension controls](https://resources.arc.net/hc/en-us/articles/19434259167767-Extensions-in-Arc-How-to-Import-Add-Open).
+
+### Firefox installation
+
+1. Open `about:debugging#/runtime/this-firefox`.
+2. Click **Load Temporary Add-on**, then select `build/firefox/manifest.json`.
+3. Reload ChatGPT. Click the AI Notebook toolbar button to open Firefox's native sidebar; grant access to ChatGPT if Firefox asks.
+4. Highlights, local notebook storage, notes, old conversations, and English/Persian PDF export use the same implementation.
+
+Temporary add-ons are removed when Firefox restarts. A permanent release installation requires Mozilla signing; the generated XPI is currently unsigned. Use the [temporary installation guide](https://extensionworkshop.com/documentation/develop/temporary-installation-in-firefox/) and [Mozilla signing guide](https://extensionworkshop.com/documentation/publish/signing-and-distribution-overview/). Firefox 140+ is required because page highlighting uses the [CSS Custom Highlight API added in Firefox 140](https://developer.mozilla.org/en-US/docs/Mozilla/Firefox/Releases/140). Mobile browsers are not a supported target.
+
+### Packages and verification
+
+`npm run package` builds and creates `packages/ai-notebook-chrome-2.4.1.zip`, `packages/ai-notebook-arc-2.4.1.zip`, and `packages/ai-notebook-firefox-2.4.1.xpi`. Archives have their manifest at the root, include both bundled fonts/licenses, and omit source maps.
+
+- `npm run test:arc`: loads the Arc distribution in isolated Chromium, verifies the separate notebook window stays connected to its source window, and captures old/project chats after client-side navigation. This verifies the Arc build's Chromium behavior; it is not a native Arc UI test.
+- `npm run test:firefox`: temporarily installs the actual Firefox build in an isolated, headless Firefox profile. Checks real Firefox background messaging, main-page highlights, restoration after reload, full notebook messages, and PDF download. It uses a local HTTPS ChatGPT fixture and does not alter your normal browser profile. Defaults to `/Applications/Firefox.app/Contents/MacOS/firefox`; override `FIREFOX_BINARY` on other platforms. Requires OpenSSL and downloads pinned geckodriver 0.37.1 on first run.
+- `npm run lint:firefox`: runs Mozilla's add-on linter. The current build has zero errors; warnings concern bundled third-party React/PDF/HTML-library patterns and need review when submitting for signing.
+
+The browser API boundary uses Firefox's native Promise-based `browser` APIs and Chromium's `chrome` APIs. Extension origins are obtained with `runtime.getURL`, supporting Firefox's `moz-extension` scheme. Background listeners and IndexedDB's serialized writer are shared; Firefox uses an MV3 event background rather than a Chromium service worker. Archives stay local to the browser/profile where they were saved; cross-browser sync is not implemented.
+
+### Arc toolbar launch fix (2.4.1)
+
+The Arc manifest now declares `action.default_popup` so clicking AI Notebook immediately opens the notebook through the browser's native extension-popup mechanism. The initial UI no longer depends on a background action-click handler creating a window. Keep notebook open creates or reuses a separate notebook window, with a notebook-tab fallback if extension windows are rejected. Both preserve the source chat context; the fallback tab does not attempt to capture its own extension page.
+
+Reload the extension loaded from `build/arc` in Arc's extension manager and confirm **2.4.1**, then reload the ChatGPT tab. The Arc regression now actually calls `action.openPopup`, inspects the rendered toolbar popup, clicks Keep notebook open, and verifies notebook activation and old/project navigation. It runs in isolated Chromium; native Arc UI behavior still requires verification in Arc.
