@@ -88,7 +88,7 @@ try {
   await mkdir('artifacts', { recursive: true });
   await chat.screenshot({ path: 'artifacts/main-page-highlight.png', fullPage: true });
   const downloading = panel.waitForEvent('download');
-  await panel.getByRole('button', { name: 'Export full PDF', exact: true }).click();
+  await panel.getByRole('button', { name: 'Save study PDF', exact: true }).click();
   await (await downloading).saveAs('artifacts/main-page-highlight.pdf');
   expect((await readPdfText('artifacts/main-page-highlight.pdf')).text).toContain(
     'Saved from the original ChatGPT page',

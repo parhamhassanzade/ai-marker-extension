@@ -1,7 +1,8 @@
 import { jsPDF } from 'jspdf';
 import { hasArabic, isRtlParagraph, visualRuns } from './bidirectional';
 import { resolveAnchor } from '../content/highlighter';
-import { chaptersOf } from '../notebook/chapters';
+import { overviewOf } from '../knowledge/overview';
+import { chaptersOf, chapterTitle } from '../notebook/chapters';
 import { layoutHighlightedText, PDF_HIGHLIGHT_COLORS } from './textLayout';
 import type { Highlight, Notebook } from '../types';
 const accents = { yellow: [170, 126, 29], green: [44, 128, 81], red: [181, 66, 64] } as const;
@@ -93,6 +94,7 @@ export function createNotebookPdf(notebook: Notebook, font?: string, arabicFont?
     color: readonly number[] = [44, 49, 42],
     space = 3,
     highlights?: Highlight[],
+    measureWidth = width,
   ) {
     pdf.setFontSize(size);
     pdf.setTextColor(color[0] ?? 44, color[1] ?? 49, color[2] ?? 42);
@@ -117,7 +119,7 @@ export function createNotebookPdf(notebook: Notebook, font?: string, arabicFont?
       const rows = layoutHighlightedText(
         paragraph,
         local,
-        width,
+        measureWidth,
         (value) => visualWidth(value, rtl),
         printable,
       );
@@ -132,7 +134,7 @@ export function createNotebookPdf(notebook: Notebook, font?: string, arabicFont?
           setRunFont(run.font);
           return pdf.getTextWidth(run.text);
         });
-        let x = rtl ? left + width - lengths.reduce((sum, length) => sum + length, 0) : left;
+        let x = rtl ? left + measureWidth - lengths.reduce((sum, length) => sum + length, 0) : left;
         for (let i = 0; i < runs.length; i++) {
           const run = runs[i]!;
           const length = lengths[i]!;
@@ -168,60 +170,152 @@ export function createNotebookPdf(notebook: Notebook, font?: string, arabicFont?
     author: 'AI Notebook',
     subject: 'AI conversation notebook',
   });
-  line('AI Notebook', 23, [52, 74, 40], 5);
-  line(notebook.title, 16, [44, 49, 42], 5);
+  const chapters = chaptersOf(notebook.messages);
+  const overview = overviewOf(notebook);
+  // Quiet, book-like cover; the notebook's title is the visual anchor.
+  pdf.setFillColor(248, 246, 239);
+  pdf.rect(0, 0, 210, 297, 'F');
+  y = 29;
+  line('AI NOTEBOOK', 10, [87, 107, 75], 18);
+  pdf.setDrawColor(182, 193, 163);
+  pdf.line(left, y, left + 36, y);
+  y += 18;
+  line(notebook.title, 29, [44, 53, 39], 12);
+  line('Questions worth asking. Ideas worth keeping.', 12, [111, 117, 104], 10);
+  y = Math.max(y, 185);
   line(
-    `Platform: ${notebook.platform}    Date: ${new Date(notebook.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}`,
-    9,
+    `${chapters.length} chapters   /   ${notebook.highlights.length} saved ${notebook.highlights.length === 1 ? 'idea' : 'ideas'}   /   ${notebook.highlights.filter((h) => h.note).length} personal ${notebook.highlights.filter((h) => h.note).length === 1 ? 'note' : 'notes'}`,
+    10,
+    [87, 107, 75],
+    14,
   );
-  line(`Conversation: ${notebook.conversationTitle}`, 9);
-  line(`Source: ${notebook.website}`, 8);
   line(
-    `Status: ${notebook.finishedAt ? 'Finished' : 'In progress'}    Insights: ${notebook.highlights.length}`,
+    `${notebook.platform} · ${new Date(notebook.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}`,
     9,
-    [100, 107, 96],
-    9,
+    [111, 117, 104],
+    3,
   );
-  for (const chapter of chaptersOf(notebook.messages)) {
-    if (chapter.number > 1) y += 7;
-    keepSection(35);
-    line(`Chapter ${chapter.number}`, 16, [52, 74, 40], 5);
+  line(`Source: ${notebook.website}`, 7, [111, 117, 104], 3);
+  const coverPages = pdf.getNumberOfPages();
+  // Lay out the contents before reserving its pages. Actual destination page
+  // numbers are filled after the chapter bodies are laid out, including wraps.
+  const contents = [
+    'Notebook overview',
+    ...chapters.map(chapterTitle),
+    ...(notebook.highlights.length ? ['Your saved highlights'] : []),
+  ];
+  const positions: { page: number; y: number; height: number }[] = [];
+  let tocPage = 0;
+  let tocY = 49;
+  pdf.setFontSize(10);
+  for (const title of contents) {
+    const rows = layoutHighlightedText(
+      title,
+      [],
+      151,
+      (value) => visualWidth(value, isRtlParagraph(title)),
+      printable,
+    );
+    const height = rows.length * 10 * 0.3528 * 1.65 + 5;
+    if (tocY + height > bottom) {
+      tocPage++;
+      tocY = 49;
+    }
+    positions.push({ page: tocPage, y: tocY, height });
+    tocY += height;
+  }
+  const tocPages = tocPage + 1;
+  for (let i = 0; i < tocPages; i++) pdf.addPage();
+  const destinations: number[] = [];
+  pdf.addPage();
+  y = 27;
+  destinations.push(pdf.getNumberOfPages());
+  line('Notebook overview', 22, [52, 74, 40], 10);
+  if (overview.summary) {
+    line('Your summary', 11, [87, 107, 75]);
+    line(overview.summary, 11, undefined, 10);
+  } else
+    line(
+      'A personal collection of the questions you explored and the ideas you chose to keep.',
+      11,
+      [111, 117, 104],
+      10,
+    );
+  if (overview.topics.length) {
+    line('Topics', 11, [87, 107, 75]);
+    line(overview.topics.join(' · '), 10, undefined, 10);
+  }
+  if (overview.keyInsights.length) {
+    line('Ideas to return to', 15, [52, 74, 40], 5);
+    for (const insight of overview.keyInsights) {
+      keepSection(25);
+      line(insight.text, 10, undefined, 6);
+    }
+  }
+  for (const chapter of chapters) {
+    pdf.addPage();
+    y = 27;
+    destinations.push(pdf.getNumberOfPages());
+    line(`CHAPTER ${String(chapter.number).padStart(2, '0')}`, 9, [111, 117, 104], 6);
+    line(chapterTitle(chapter), 20, [52, 74, 40], 10);
     for (const message of chapter.messages) {
-      keepSection();
-      line(message.role === 'user' ? 'User Question' : 'AI Answer', 11, [52, 74, 40]);
-      if (message.timestamp) line(new Date(message.timestamp).toLocaleString(), 8, [100, 107, 96]);
+      keepSection(25);
+      if (message.role === 'user') {
+        pdf.setFillColor(239, 243, 234);
+        pdf.roundedRect(left - 3, y - 5, width + 6, 11, 2, 2, 'F');
+      }
+      line(message.role === 'user' ? 'Your question' : 'AI response', 10, [87, 107, 75], 4);
       const highlights = notebook.highlights.filter((h) => h.messageId === message.id);
-      line(message.text, 10, undefined, 5, highlights);
-      if (highlights.length) {
-        keepSection(35);
-        line('Highlighted Notes', 12);
-      }
-      for (const h of highlights) {
-        keepSection();
-        line(`${labels[h.color]} · ${new Date(h.createdAt).toLocaleString()}`, 9, accents[h.color]);
-        line(h.text, 10, undefined, 3, [
-          { ...h, anchor: { start: 0, end: h.text.length, prefix: '', suffix: '' } },
-        ]);
-        if (h.note) {
-          keepSection(20);
-          line('User note', 9, [100, 107, 96]);
-          line(h.note);
-        }
-      }
+      line(message.text, 10, undefined, 10, highlights);
     }
   }
-  const unmatched = notebook.highlights.filter(
-    (h) => !notebook.messages.some((m) => m.id === h.messageId),
-  );
-  if (unmatched.length) {
-    keepSection(35);
-    line('Additional captured insights', 12);
-    for (const h of unmatched) {
-      line(labels[h.color], 9, accents[h.color]);
-      line(h.text);
-      if (h.note) line(`User note: ${h.note}`);
+  if (notebook.highlights.length) {
+    pdf.addPage();
+    y = 27;
+    destinations.push(pdf.getNumberOfPages());
+    line('Your saved highlights', 22, [52, 74, 40], 9);
+    line('A collection of the ideas you chose to keep.', 10, [111, 117, 104], 8);
+    for (const highlight of notebook.highlights) {
+      keepSection(35);
+      const chapter = chapters.find((chapter) =>
+        chapter.messages.some((message) => message.id === highlight.messageId),
+      );
+      line(
+        `${labels[highlight.color]}${highlight.bookmarked ? ' · Bookmarked' : ''}${chapter ? ` · Chapter ${chapter.number}` : ''}`,
+        9,
+        accents[highlight.color],
+        3,
+      );
+      line(highlight.text, 10, undefined, 4, [
+        { ...highlight, anchor: { start: 0, end: highlight.text.length, prefix: '', suffix: '' } },
+      ]);
+      if (highlight.note) {
+        keepSection(20);
+        line('Your note', 9, [111, 117, 104]);
+        line(highlight.note, 10, undefined, 4);
+      }
+      if (highlight.tags?.length)
+        line(highlight.tags.map((tag) => `#${tag}`).join('  '), 9, [87, 107, 75], 5);
+      y += 5;
     }
   }
+  for (let i = 0; i < tocPages; i++) {
+    pdf.setPage(coverPages + i + 1);
+    y = 27;
+    line(i ? 'Contents, continued' : 'Contents', 22, [52, 74, 40], 8);
+  }
+  positions.forEach((position, index) => {
+    pdf.setPage(coverPages + position.page + 1);
+    y = position.y;
+    line(contents[index]!, 10, undefined, 5, undefined, 151);
+    pdf.setFont(font ? 'NotoSans' : 'helvetica');
+    pdf.setFontSize(10);
+    pdf.setTextColor(111, 117, 104);
+    pdf.text(String(destinations[index]), 191, position.y, { align: 'right' });
+    pdf.link(left, position.y - 5, width, position.height, { pageNumber: destinations[index]! });
+    pdf.setDrawColor(229, 232, 222);
+    pdf.line(left, position.y + position.height - 3, 191, position.y + position.height - 3);
+  });
   const total = pdf.getNumberOfPages();
   for (let page = 1; page <= total; page++) {
     pdf.setPage(page);
@@ -230,7 +324,7 @@ export function createNotebookPdf(notebook: Notebook, font?: string, arabicFont?
     pdf.setFont(font ? 'NotoSans' : 'helvetica');
     pdf.setFontSize(8);
     pdf.setTextColor(110, 117, 105);
-    pdf.text('AI Notebook · Private notebook', left, 290);
+    pdf.text('AI Notebook · Ideas worth keeping', left, 290);
     pdf.text(`${page} / ${total}`, 191, 290, { align: 'right' });
   }
   return pdf;
@@ -240,6 +334,8 @@ export async function exportNotebookPdf(notebook: Notebook) {
     [
       notebook.title,
       notebook.conversationTitle,
+      notebook.overview?.summary ?? '',
+      ...notebook.highlights.flatMap((h) => h.tags ?? []),
       ...notebook.messages.map((m) => m.text),
       ...notebook.highlights.flatMap((h) => [h.text, h.note]),
     ].join('\n'),

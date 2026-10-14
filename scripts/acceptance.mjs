@@ -38,10 +38,9 @@ try {
       },
     });
   }, tabId);
-  await expect(
-    panel.getByRole('button', { name: 'Activate Notebook Mode', exact: true }),
-  ).toBeEnabled();
-  await panel.getByRole('button', { name: 'Activate Notebook Mode', exact: true }).click();
+  await expect(panel.getByRole('button', { name: 'Create notebook', exact: true })).toBeEnabled();
+  await panel.getByRole('button', { name: 'Create notebook', exact: true }).click();
+  await panel.getByRole('button', { name: 'Read', exact: true }).click();
   await expect(panel.locator('.capture-notice')).toContainText('4 messages imported');
   await expect(panel.locator('[data-notebook-message-id]')).toHaveCount(4);
   const notebook = await panel.evaluate(async () => {
@@ -65,12 +64,12 @@ try {
   });
   async function exportAndVerify(file) {
     const downloading = panel.waitForEvent('download');
-    await panel.getByRole('button', { name: 'Export full PDF', exact: true }).click();
+    await panel.getByRole('button', { name: 'Save study PDF', exact: true }).click();
     await (await downloading).saveAs(file);
     const result = await readPdfText(file);
-    let previous = -1;
+    let previous = result.text.indexOf('CHAPTER 01');
     for (const content of expected) {
-      const position = result.text.indexOf(content);
+      const position = result.text.indexOf(content, previous + 1);
       expect(position, `Missing full message in ${file}: ${content}`).toBeGreaterThan(previous);
       previous = position;
     }

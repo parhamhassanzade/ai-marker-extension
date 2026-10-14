@@ -33,9 +33,9 @@ try {
       if (!saved.ok) throw new Error(saved.error);
     }
   }, notebook);
-  await expect(panel.getByRole('button', { name: 'Export full PDF', exact: true })).toBeEnabled();
+  await expect(panel.getByRole('button', { name: 'Save study PDF', exact: true })).toBeEnabled();
   const downloading = panel.waitForEvent('download');
-  await panel.getByRole('button', { name: 'Export full PDF', exact: true }).click();
+  await panel.getByRole('button', { name: 'Save study PDF', exact: true }).click();
   const download = await downloading;
   expect(download.suggestedFilename()).toBe('دفتر یادگیری ماشین.pdf');
   await mkdir('output/pdf', { recursive: true });

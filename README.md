@@ -1,5 +1,7 @@
 # AI Notebook
 
+Version **3.0.0** centers the notebook itself: **Home**, **Read**, and **Highlights**. Start with **Create notebook**, keep ideas with notes/tags/bookmarks, revisit them through source-linked chapter navigation, and save a study PDF when you are ready. Existing notebooks remain usable.
+
 AI Notebook is a Manifest V3 desktop browser extension for Chrome, Edge, Arc, and Firefox that turns a ChatGPT conversation into a personal study notebook. Activate Notebook Mode in the browser's side panel to collect full questions and answers into chapters. Highlight passages, add and edit notes beside them, continue chatting, and export the full notebook as a paginated PDF.
 
 ## Architecture plan
@@ -184,7 +186,7 @@ npm run test:e2e
 To test the installed build in Chrome:
 
 1. Build the project with `npm run build`.
-2. Open `chrome://extensions`, enable Developer mode, and load `dist` (or reload the existing AI Notebook card). Check that its version is **2.4.1**.
+2. Open `chrome://extensions`, enable Developer mode, and load `dist` (or reload the existing AI Notebook card). Check that its version is **3.0.0**.
 3. Open an existing ChatGPT conversation with these four messages: “What is machine learning?”, a complete answer, “What is supervised learning?”, and a complete answer containing “uses labeled data”.
 4. Click the extension icon and **Activate Notebook Mode**. Confirm **4 messages imported** and that both full question/answer chapters appear. No manual copying or adding messages is needed.
 5. Export before highlighting and confirm the full conversation is in the PDF.
@@ -214,7 +216,7 @@ Select a sentence directly in the main ChatGPT conversation. The floating toolba
 
 Highlights appear on the original page, survive reloads, and appear in the notebook and full PDF using the same colors. Remove a highlight or clear highlights from the notebook to remove its page color. Selections can span formatting and paragraphs within one message; select each message separately.
 
-After upgrading, rebuild with `npm run build`, reload AI Notebook in `chrome://extensions`, then reload the ChatGPT tab. The installed extension should show **2.4.1**. Run `npm run test:source` to check real mouse selection on the original page, notes, notebook persistence, reload restoration, PDF export, and clearing.
+After upgrading, rebuild with `npm run build`, reload AI Notebook in `chrome://extensions`, then reload the ChatGPT tab. The installed extension should show **3.0.0**. Run `npm run test:source` to check real mouse selection on the original page, notes, notebook persistence, reload restoration, PDF export, and clearing.
 
 Source colors use the CSS Custom Highlight API so ChatGPT's React-owned nodes remain intact. Conversation-local source saves are validated in the background worker and committed atomically with the corresponding message and annotation.
 
@@ -264,7 +266,7 @@ Temporary add-ons are removed when Firefox restarts. A permanent release install
 
 ### Packages and verification
 
-`npm run package` builds and creates `packages/ai-notebook-chrome-2.4.1.zip`, `packages/ai-notebook-arc-2.4.1.zip`, and `packages/ai-notebook-firefox-2.4.1.xpi`. Archives have their manifest at the root, include both bundled fonts/licenses, and omit source maps.
+`npm run package` builds and creates `packages/ai-notebook-chrome-3.0.0.zip`, `packages/ai-notebook-arc-3.0.0.zip`, and `packages/ai-notebook-firefox-3.0.0.xpi`. Archives have their manifest at the root, include both bundled fonts/licenses, and omit source maps.
 
 - `npm run test:arc`: loads the Arc distribution in isolated Chromium, verifies the separate notebook window stays connected to its source window, and captures old/project chats after client-side navigation. This verifies the Arc build's Chromium behavior; it is not a native Arc UI test.
 - `npm run test:firefox`: temporarily installs the actual Firefox build in an isolated, headless Firefox profile. Checks real Firefox background messaging, main-page highlights, restoration after reload, full notebook messages, and PDF download. It uses a local HTTPS ChatGPT fixture and does not alter your normal browser profile. Defaults to `/Applications/Firefox.app/Contents/MacOS/firefox`; override `FIREFOX_BINARY` on other platforms. Requires OpenSSL and downloads pinned geckodriver 0.37.1 on first run.
@@ -277,3 +279,16 @@ The browser API boundary uses Firefox's native Promise-based `browser` APIs and 
 The Arc manifest now declares `action.default_popup` so clicking AI Notebook immediately opens the notebook through the browser's native extension-popup mechanism. The initial UI no longer depends on a background action-click handler creating a window. Keep notebook open creates or reuses a separate notebook window, with a notebook-tab fallback if extension windows are rejected. Both preserve the source chat context; the fallback tab does not attempt to capture its own extension page.
 
 Reload the extension loaded from `build/arc` in Arc's extension manager and confirm **2.4.1**, then reload the ChatGPT tab. The Arc regression now actually calls `action.openPopup`, inspects the rendered toolbar popup, clicks Keep notebook open, and verifies notebook activation and old/project navigation. It runs in isolated Chromium; native Arc UI behavior still requires verification in Arc.
+
+## A personal knowledge notebook (3.0.0)
+
+- **Home:** your title, optional personal overview, topics, key insights drawn from saved highlights, and a chapter list. Bookmarked ideas are prioritized. Topic chips combine source keywords and your highlight tags; no AI summary is generated. Paste a summary from your AI conversation or write your own in Your overview.
+- **Read:** quiet question/response cards, inline colored highlights, and notes in the margins. Browse chapters or jump directly from an insight to its source. A jump beyond the first 20 chapters loads the relevant chapter automatically. Persian text uses automatic text direction in cards and notes.
+- **Highlights:** one searchable collection across the notebook. Find text, notes, or tags; filter by bookmark or tag; return to the original passage. Edit a note and comma-separated tags together, bookmark an idea, or remove a highlight.
+- **Save study PDF:** a secondary action after the notebook. The export has a title-led cover, clickable contents with accurate page numbers, an overview/topics section, question-titled chapters with complete questions and responses, and a saved-highlight collection with personal notes, tags, and bookmarks. Your pasted summary is included when present. English and Persian rendering remains supported.
+
+Highlight metadata and personal overviews commit through the existing serialized background writer. They are optional fields, so existing IndexedDB notebooks require no destructive migration. Manual overviews are preserved when new replies arrive. No AI provider, model download, account, network permission, or cloud transmission was added.
+
+Run `npm run test:ux` to verify the complete knowledge-notebook flow, annotation/search/bookmark/tag persistence, manual overview persistence, late chapter navigation, and the study PDF. Screenshots are saved as `artifacts/knowledge-home.png`, `artifacts/knowledge-home-dark.png`, and `artifacts/knowledge-highlights.png`; a study PDF preview is saved as `output/pdf/study-notebook.pdf`.
+
+Reload the current browser build and confirm **3.0.0**: Chrome/Edge `dist`, Arc `build/arc`, Firefox `build/firefox`. Then reload your ChatGPT tab.

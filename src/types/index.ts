@@ -31,6 +31,16 @@ export interface Highlight {
   createdAt: string;
   website: string;
   anchor: TextAnchor;
+  tags?: string[];
+  bookmarked?: boolean;
+}
+export interface NotebookOverview {
+  summary: string;
+  topics: string[];
+  keyInsights: { text: string; messageId: string }[];
+  kind: 'local' | 'manual';
+  generatedAt: string;
+  sourceSignature: string;
 }
 export interface Notebook {
   id: string;
@@ -44,6 +54,7 @@ export interface Notebook {
   finishedAt?: string;
   messages: Message[];
   highlights: Highlight[];
+  overview?: NotebookOverview;
 }
 export interface Database {
   version: 1;
@@ -59,6 +70,21 @@ export interface AIPlatformAdapter {
   getConversationId(): string;
 }
 export type Command =
+  | {
+      type: 'updateAnnotation';
+      id: string;
+      highlightId: string;
+      note: string;
+      tags: string[];
+      bookmarked: boolean;
+    }
+  | {
+      type: 'saveOverview';
+      id: string;
+      summary: string;
+      kind: 'manual';
+      sourceSignature: string;
+    }
   | { type: 'sourceHighlight'; snapshot: ConversationSnapshot; highlight: Highlight }
   | { type: 'activate'; snapshot: ConversationSnapshot }
   | { type: 'pause'; id: string }

@@ -20,3 +20,15 @@ export function chaptersOf(messages: Message[]): Chapter[] {
   }
   return chapters;
 }
+
+export function chapterTitle(chapter: Chapter): string {
+  const text =
+    chapter.messages.find((m) => m.role === 'user')?.text ??
+    chapter.messages[0]?.text ??
+    'Collected ideas';
+  const title = text
+    .replace(/[#*_`]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return title.length > 90 ? title.slice(0, 87) + '…' : title;
+}

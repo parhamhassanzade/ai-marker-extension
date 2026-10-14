@@ -110,8 +110,16 @@ try {
   );
   assert.equal(archive.ok, true);
   assert.equal(archive.data.notebooks[0].highlights[0].text, 'Machine learning');
+  const annotated = await driver.executeAsyncScript(`
+    const done=arguments[arguments.length-1];
+    browser.runtime.sendMessage({type:'list'}).then(async result=>{
+      const notebook=result.data.notebooks[0];const h=notebook.highlights[0];
+      done(await browser.runtime.sendMessage({type:'updateAnnotation',id:notebook.id,highlightId:h.id,note:'A Firefox research note',tags:['research'],bookmarked:true}));
+    });`);
+  assert.equal(annotated.ok, true);
+  assert.equal(annotated.data.notebooks[0].highlights[0].bookmarked, true);
   const exportButton = await driver.findElement(
-    By.xpath('//button[normalize-space()="Export full PDF"]'),
+    By.xpath('//button[normalize-space()="Save study PDF"]'),
   );
   await exportButton.click();
   const file = await driver.wait(async () => {
@@ -126,6 +134,8 @@ try {
   const pdf = await readPdfText(path.join(temporary, file));
   assert.match(pdf.text, /Machine learning/);
   assert.match(pdf.text, /Supervised learning/);
+  assert.match(pdf.text, /A Firefox research note/);
+  assert.match(pdf.text, /#research/);
   await driver.switchTo().window(chatHandle);
   console.log(
     'PASS Firefox: real add-on installation, MV3 background, main-page highlight, reload persistence, notebook messages, native APIs, full PDF download',

@@ -1,3 +1,4 @@
+import { localOverview, contentSignature } from '../knowledge/overview';
 import { v4 as uuid } from 'uuid';
 import type { Command, ConversationSnapshot, Database, Notebook } from '../types';
 import { resolveAnchor } from '../content/highlighter';
@@ -20,6 +21,7 @@ function newNotebook(snapshot: ConversationSnapshot, title?: string): Notebook {
     website: snapshot.website,
     messages: structuredClone(snapshot.messages),
     highlights: [],
+    overview: localOverview(snapshot.messages, title || snapshot.title),
     createdAt: now,
     updatedAt: now,
   };
@@ -120,6 +122,17 @@ export function transition(db: Database, command: Command): Database {
       notebook.messages.sort((a, b) => a.order! - b.order!);
     notebook.conversationTitle = s.title;
     notebook.website = s.website;
+    if (notebook.overview?.sourceSignature !== contentSignature(notebook.messages)) {
+      const previousOverview = notebook.overview;
+      notebook.overview = localOverview(notebook.messages, notebook.title);
+      if (previousOverview?.kind === 'manual')
+        notebook.overview = {
+          ...notebook.overview,
+          summary: previousOverview.summary,
+          kind: 'manual',
+          generatedAt: previousOverview.generatedAt,
+        };
+    }
     const before = db.notebooks.find((n) => n.id === notebook.id);
     if (JSON.stringify(before) !== JSON.stringify(notebook))
       notebook.updatedAt = new Date().toISOString();
@@ -151,6 +164,19 @@ export function transition(db: Database, command: Command): Database {
       const h = notebook.highlights.find((h) => h.id === command.highlightId);
       if (!h) throw new Error('This highlight no longer exists.');
       h.note = command.note;
+    }
+    if (command.type === 'updateAnnotation') {
+      const h = notebook.highlights.find((h) => h.id === command.highlightId);
+      if (!h) throw new Error('This highlight no longer exists.');
+      h.note = command.note;
+      h.tags = [...new Set(command.tags.map((tag) => tag.trim()).filter(Boolean))];
+      h.bookmarked = command.bookmarked;
+    }
+    if (command.type === 'saveOverview') {
+      if (command.sourceSignature !== contentSignature(notebook.messages))
+        throw new Error('Your conversation changed. Generate the summary again.');
+      const overview = localOverview(notebook.messages, notebook.title);
+      notebook.overview = { ...overview, summary: command.summary.trim(), kind: command.kind };
     }
     if (command.type === 'clear') notebook.highlights = [];
     if (command.type === 'removeHighlight')

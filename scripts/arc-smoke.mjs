@@ -64,7 +64,7 @@ try {
   await expect
     .poll(() =>
       popupEvaluate(
-        `Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Activate Notebook Mode' && !button.disabled)`,
+        `Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Create notebook' && !button.disabled)`,
       ),
     )
     .toBe(true);
@@ -74,19 +74,15 @@ try {
   );
   const panel = await popupOpened;
   const windowId = await panel.evaluate(async () => (await chrome.windows.getCurrent()).id);
-  await expect(
-    panel.getByRole('button', { name: 'Activate Notebook Mode', exact: true }),
-  ).toBeEnabled();
-  await panel.getByRole('button', { name: 'Activate Notebook Mode', exact: true }).click();
+  await expect(panel.getByRole('button', { name: 'Create notebook', exact: true })).toBeEnabled();
+  await panel.getByRole('button', { name: 'Create notebook', exact: true }).click();
   await expect(panel.locator('[data-notebook-message-id]')).toHaveCount(4);
   expect(await worker.evaluate(async (id) => (await chrome.windows.get(id)).type, windowId)).toBe(
     'popup',
   );
   await chat.evaluate(() => history.pushState({}, '', '/g/g-project/c/arc-old'));
-  await expect(
-    panel.getByRole('button', { name: 'Activate Notebook Mode', exact: true }),
-  ).toBeEnabled();
-  await panel.getByRole('button', { name: 'Activate Notebook Mode', exact: true }).click();
+  await expect(panel.getByRole('button', { name: 'Create notebook', exact: true })).toBeEnabled();
+  await panel.getByRole('button', { name: 'Create notebook', exact: true }).click();
   await expect
     .poll(() =>
       panel.evaluate(

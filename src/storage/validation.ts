@@ -33,6 +33,8 @@ function isSnapshot(value: unknown): value is ConversationSnapshot {
       (m.order === undefined || (Number.isInteger(m.order) && Number(m.order) >= 0)),
   );
 }
+const isTags = (value: unknown) =>
+  Array.isArray(value) && value.length <= 20 && value.every((tag) => isText(tag, 50));
 function isHighlight(value: unknown): value is Highlight {
   if (!isRecord(value) || !isRecord(value.anchor)) return false;
   const a = value.anchor;
@@ -46,6 +48,8 @@ function isHighlight(value: unknown): value is Highlight {
     isText(value.text, 50_000) &&
     !!value.text &&
     isText(value.note, 5000) &&
+    (value.tags === undefined || isTags(value.tags)) &&
+    (value.bookmarked === undefined || typeof value.bookmarked === 'boolean') &&
     ['yellow', 'green', 'red'].includes(String(value.color)) &&
     isText(value.createdAt, 40) &&
     Number.isFinite(Date.parse(String(value.createdAt))) &&
@@ -69,6 +73,17 @@ export function isCommand(value: unknown): value is Command {
     return value.previousConversationId === undefined || isText(value.previousConversationId, 300);
   }
   if (!isText(value.id, 100) || !value.id) return false;
+  if (value.type === 'updateAnnotation')
+    return (
+      isText(value.highlightId, 100) &&
+      isText(value.note, 5000) &&
+      isTags(value.tags) &&
+      typeof value.bookmarked === 'boolean'
+    );
+  if (value.type === 'saveOverview')
+    return (
+      isText(value.summary, 10000) && value.kind === 'manual' && isText(value.sourceSignature, 100)
+    );
   if (value.type === 'annotate') return isHighlight(value.highlight);
   if (value.type === 'updateNote')
     return isText(value.highlightId, 100) && isText(value.note, 5000);

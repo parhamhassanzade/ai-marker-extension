@@ -45,14 +45,12 @@ try {
   await panel.setViewportSize({ width: 430, height: 1000 });
   await panel.goto(`chrome-extension://${extensionId}/sidepanel.html`);
   await chat.bringToFront();
-  await expect(
-    panel.getByRole('button', { name: 'Activate Notebook Mode', exact: true }),
-  ).toBeEnabled();
-  await panel.getByRole('button', { name: 'Activate Notebook Mode', exact: true }).click();
-  await expect(panel.getByText('CHAPTER 01', { exact: true })).toBeVisible();
-  await expect(
-    panel.getByRole('button', { name: 'Pause Notebook Mode', exact: true }),
-  ).toBeEnabled();
+  await expect(panel.getByRole('button', { name: 'Create notebook', exact: true })).toBeEnabled();
+  await panel.getByRole('button', { name: 'Create notebook', exact: true }).click();
+  await expect(panel.getByRole('region', { name: 'Notebook home' })).toBeVisible();
+  await panel.getByRole('button', { name: 'Read', exact: true }).click();
+  await expect(panel.locator('.chapter-heading').first()).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Pause updates', exact: true })).toBeEnabled();
   const notebookId = (await stored())[0].id;
   expect((await stored())[0].messages).toHaveLength(2);
   await expect(panel.locator('[data-notebook-message-id="a1"]')).toContainText(
@@ -94,7 +92,9 @@ try {
     .getByRole('textbox', { name: 'Edit highlight note', exact: true })
     .fill('Edited definition');
   await panel.getByRole('button', { name: 'Save note', exact: true }).click();
-  await expect(panel.locator('.user-note')).toContainText('Edited definition');
+  await expect(panel.locator('[aria-label="Reading view"] .user-note')).toContainText(
+    'Edited definition',
+  );
   // Continuing to chat updates the same notebook with complete new turns.
   await chat.evaluate(() => {
     document
@@ -104,7 +104,7 @@ try {
         '<div data-message-author-role="user" data-message-id="q2">Explain attention.</div><div data-message-author-role="assistant" data-message-id="a2"><div class="markdown">Attention gives different weights to parts of the input.</div></div>',
       );
   });
-  await expect(panel.getByText('CHAPTER 02', { exact: true })).toBeVisible();
+  await expect(panel.locator('.chapter-heading').nth(1)).toContainText('Explain attention.');
   expect((await stored())[0].id).toBe(notebookId);
   expect((await stored())[0].messages).toHaveLength(4);
   await selectQuote('a2', 'different weights');
@@ -117,8 +117,8 @@ try {
     animations: 'disabled',
   });
   await panel.getByRole('button', { name: 'Switch to dark theme' }).click();
-  await expect(panel.locator('.primary-button')).toHaveCSS(
-    'background-color',
+  await expect(panel.locator('.notebook-tabs button[aria-current="page"]')).toHaveCSS(
+    'color',
     'rgb(177, 204, 149)',
   );
   await panel.screenshot({
@@ -127,7 +127,7 @@ try {
     animations: 'disabled',
   });
   const downloading = panel.waitForEvent('download');
-  await panel.getByRole('button', { name: 'Export full PDF', exact: true }).click();
+  await panel.getByRole('button', { name: 'Save study PDF', exact: true }).click();
   const download = await downloading;
   await download.saveAs('artifacts/notebook.pdf');
   expect((await readFile('artifacts/notebook.pdf')).subarray(0, 5).toString()).toBe('%PDF-');
@@ -140,7 +140,7 @@ try {
     'Edited definition',
   ])
     expect(exported.text).toContain(content);
-  await panel.getByRole('button', { name: 'Pause Notebook Mode', exact: true }).click();
+  await panel.getByRole('button', { name: 'Pause updates', exact: true }).click();
   await chat.evaluate(() => {
     document
       .querySelector('main')
@@ -150,8 +150,8 @@ try {
       );
   });
   expect((await stored())[0].messages).toHaveLength(4);
-  await panel.getByRole('button', { name: 'Activate Notebook Mode', exact: true }).click();
-  await expect(panel.getByText('CHAPTER 03', { exact: true })).toBeVisible();
+  await panel.getByRole('button', { name: 'Resume updates', exact: true }).click();
+  await expect(panel.locator('.chapter-heading').nth(2)).toContainText('What is a token?');
   expect((await stored()).length).toBe(1);
   expect((await stored())[0].id).toBe(notebookId);
   await panel.reload();
@@ -162,11 +162,11 @@ try {
   await expect(panel.locator('mark[data-highlight-id]')).toHaveCount(0);
   expect((await stored())[0].messages).toHaveLength(6);
   await panel.getByRole('button', { name: 'Finish', exact: true }).click();
-  await expect(panel.getByText('FINISHED NOTEBOOK', { exact: true })).toBeVisible();
+  await expect(panel.locator('.status-pill')).toBeVisible();
   await chat.reload();
   await panel.reload();
   await chat.bringToFront();
-  await expect(panel.getByText('FINISHED NOTEBOOK', { exact: true })).toBeVisible();
+  await expect(panel.locator('.status-pill')).toBeVisible();
   await panel
     .getByRole('button', { name: 'New notebook for this conversation', exact: true })
     .click();

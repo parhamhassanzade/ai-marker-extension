@@ -20,3 +20,12 @@ it('saves the source highlight when the worker supports the toolbar protocol', a
   expect(await storage.saveSourceHighlight(snapshot, highlight)).toEqual(data);
   expect(sendMessage).toHaveBeenLastCalledWith({ type: 'sourceHighlight', snapshot, highlight });
 });
+
+it('explains the required upgrade before sending new notebook metadata to an old worker', async () => {
+  const sendMessage = vi.fn().mockResolvedValue({ sourceHighlights: true });
+  vi.stubGlobal('chrome', { runtime: { id: 'extension', sendMessage } });
+  await expect(storage.updateAnnotation('n', 'h', 'note', ['thesis'], true)).rejects.toThrow(
+    'update reload',
+  );
+  expect(sendMessage).toHaveBeenCalledExactlyOnceWith({ type: 'capabilities' });
+});

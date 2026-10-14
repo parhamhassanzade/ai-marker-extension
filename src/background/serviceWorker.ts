@@ -70,7 +70,7 @@ extension.runtime.onMessage.addListener((command: unknown, sender, respond) => {
     'type' in command &&
     command.type === 'capabilities'
   ) {
-    respond({ sourceHighlights: true });
+    respond({ sourceHighlights: true, knowledgeNotebook: true });
     return false;
   }
   // These are broadcasts, not storage commands. Do not race a view's response.

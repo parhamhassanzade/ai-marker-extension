@@ -230,12 +230,14 @@ export default function App() {
           <ArrowUpRight size={16} /> Keep notebook open
         </button>
       )}
-      <section className={`mode-card ${currentId ? 'mode-card-active' : ''}`}>
+      <section
+        className={`${notebook ? 'capture-strip' : 'mode-card'} ${currentId ? 'mode-card-active' : ''}`}
+      >
         <div className="mode-copy">
           <span className="eyebrow">YOUR PERSONAL STUDY SPACE</span>
           <h1>
             {currentId ? (
-              'Your conversation notebook.'
+              'Your notebook is growing.'
             ) : (
               <>
                 Turn a conversation
@@ -260,13 +262,18 @@ export default function App() {
             : busy
               ? 'Working…'
               : currentId
-                ? 'Pause Notebook Mode'
-                : 'Activate Notebook Mode'}
+                ? 'Pause updates'
+                : notebook &&
+                    !notebook.finishedAt &&
+                    context &&
+                    conversationKey(notebook) === conversationKey(context)
+                  ? 'Resume updates'
+                  : 'Create notebook'}
         </button>
         <p className="mode-hint">
           {currentId
-            ? 'New questions and answers are added automatically.'
-            : 'Capture starts when you activate Notebook Mode.'}
+            ? 'New replies are added as your conversation grows.'
+            : 'Create a notebook to save this conversation and collect its best ideas.'}
         </p>
       </section>
       {connectionError && (
@@ -356,9 +363,7 @@ export default function App() {
             <>
               <section className="notebook-cover">
                 <div className="cover-top">
-                  <span className="eyebrow">
-                    {notebook.finishedAt ? 'FINISHED NOTEBOOK' : 'CONVERSATION NOTEBOOK'}
-                  </span>
+                  <span className="eyebrow">YOUR KNOWLEDGE NOTEBOOK</span>
                   <span className="status-pill">
                     <span className="dot" />
                     {collecting ? 'Live' : notebook.finishedAt ? 'Finished' : 'Paused'}
@@ -394,18 +399,27 @@ export default function App() {
                 </form>
                 <p className="meta">
                   {notebook.platform} · {chaptersOf(notebook.messages).length} chapters ·{' '}
-                  {notebook.messages.length} messages · {notebook.highlights.length} insights
+                  {notebook.highlights.length} saved{' '}
+                  {notebook.highlights.length === 1 ? 'idea' : 'ideas'}
                 </p>
                 <a className="source-link" href={notebook.website} target="_blank" rel="noreferrer">
                   Open source conversation <ArrowUpRight size={13} />
                 </a>
                 <p className="reading-hint">
-                  Select an assistant passage below to highlight it or add a note.
+                  Save the ideas you want to return to. Highlight on ChatGPT or while reading here.
                 </p>
               </section>
+              <NotebookView
+                notebook={notebook}
+                busy={busy}
+                onChange={setDb}
+                onAction={(fn) => {
+                  void act(fn);
+                }}
+              />
               <div className="document-actions">
                 <button
-                  className="primary-button"
+                  className="secondary-button save-pdf-button"
                   disabled={busy || !notebook.messages.length}
                   onClick={() => {
                     void act(async () => {
@@ -421,7 +435,7 @@ export default function App() {
                   }}
                 >
                   <Download size={15} />
-                  Export full PDF
+                  Save study PDF
                 </button>
                 <button
                   className="secondary-button"
@@ -467,22 +481,14 @@ export default function App() {
                   </button>
                 </div>
               )}
-              <NotebookView
-                notebook={notebook}
-                busy={busy}
-                onChange={setDb}
-                onAction={(fn) => {
-                  void act(fn);
-                }}
-              />
             </>
           ) : (
             <div className="empty-state">
               <BookOpen size={32} />
-              <h2>Your conversation, chapter by chapter.</h2>
+              <h2>A place for your next great idea.</h2>
               <p>
-                Activate Notebook Mode to capture questions and complete answers. Your notes stay
-                alongside the passages they belong to.
+                Create notebook to capture questions and complete answers. Your notes stay alongside
+                the passages they belong to.
               </p>
               {!context && (
                 <p>
