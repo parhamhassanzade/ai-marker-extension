@@ -8,14 +8,6 @@ export interface MessageContainer {
 }
 export const UI_SELECTOR =
   'button, [role="button"], input, textarea, select, svg, script, style, time, nav, aside, [hidden], [aria-hidden="true"], [data-testid*="message-actions"], [data-testid*="feedback"], .sr-only, .visually-hidden';
-const CONTENT_SELECTORS = [
-  '[data-testid="message-content"]',
-  '[data-message-content]',
-  '[data-testid="assistant-message"]',
-  '.markdown',
-  '.prose',
-  '.whitespace-pre-wrap',
-];
 function roleOf(element: HTMLElement): Role | undefined {
   for (const value of [
     element.dataset.messageAuthorRole,
@@ -127,15 +119,9 @@ export function cleanMessageText(root: HTMLElement): string {
     );
 }
 export function contentOf(element: HTMLElement): HTMLElement {
-  for (const selector of CONTENT_SELECTORS) {
-    const candidates = Array.from(element.querySelectorAll<HTMLElement>(selector)).filter(
-      (candidate) => !isHidden(candidate),
-    );
-    // Multiple content blocks must be retained together; otherwise the first prose
-    // block would silently truncate the rest of a full assistant response.
-    if (candidates.length === 1) return candidates[0]!;
-    if (candidates.length > 1) return element;
-  }
+  // Markdown/prose classes describe individual blocks, not necessarily the whole
+  // answer. Keep the message boundary so differently styled later sections remain
+  // selectable. cleanMessageText/sourceTextMap exclude controls and role labels.
   return element;
 }
 export function extractMessages(): Message[] {

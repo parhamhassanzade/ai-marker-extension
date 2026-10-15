@@ -83,9 +83,12 @@ export function startSourceHighlighter(adapter: AIPlatformAdapter): () => void {
   let db: Database | undefined;
   let disposed = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let selectionTimer: ReturnType<typeof setTimeout> | undefined;
+  let selecting = false;
   const names = ['yellow', 'green', 'red'] as const;
   function paint() {
     if (disposed) return;
+    if (!style.isConnected) document.documentElement.append(style);
     const key = conversationKey({
       platform: adapter.platform,
       conversationId: adapter.getConversationId(),
@@ -94,20 +97,23 @@ export function startSourceHighlighter(adapter: AIPlatformAdapter): () => void {
       db?.notebooks.find((n) => n.id === db?.activeByConversation[key]) ??
       db?.notebooks.filter((n) => conversationKey(n) === key).at(-1);
     const ranges = { yellow: [] as Range[], green: [] as Range[], red: [] as Range[] };
-    messageContainers().forEach(({ element, role, turn }, index) => {
-      const id = messageId(element, role, turn, index);
-      const root = contentOf(element);
-      const text = cleanMessageText(root);
-      const highlights = notebook?.highlights.filter((h) => h.messageId === id) ?? [];
-      if (!highlights.length) return;
-      const map = sourceTextMap(root, text);
-      for (const segment of highlightSegments(text, highlights)) {
-        const highlight = segment.highlights.at(-1);
-        if (!highlight) continue;
-        const range = sourceRange(map, segment.start, segment.end);
-        if (range) ranges[highlight.color].push(range);
-      }
-    });
+    // Do not parse every full answer on every repaint in long conversations.
+    (notebook?.highlights.length ? messageContainers() : []).forEach(
+      ({ element, role, turn }, index) => {
+        const id = messageId(element, role, turn, index);
+        const highlights = notebook?.highlights.filter((h) => h.messageId === id) ?? [];
+        if (!highlights.length) return;
+        const root = contentOf(element);
+        const text = cleanMessageText(root);
+        const map = sourceTextMap(root, text);
+        for (const segment of highlightSegments(text, highlights)) {
+          const highlight = segment.highlights.at(-1);
+          if (!highlight) continue;
+          const range = sourceRange(map, segment.start, segment.end);
+          if (range) ranges[highlight.color].push(range);
+        }
+      },
+    );
     // CSS Highlight ranges do not wrap or replace React-owned ChatGPT nodes.
     for (const color of names)
       CSS.highlights.set(`ai-notebook-${color}`, new Highlight(...ranges[color]));
@@ -192,24 +198,73 @@ export function startSourceHighlighter(adapter: AIPlatformAdapter): () => void {
   const onKeyUp = (event: KeyboardEvent) => {
     if (event.shiftKey || event.key.startsWith('Arrow')) select(event);
   };
-  document.addEventListener('pointerup', select);
-  document.addEventListener('keyup', onKeyUp);
+  function scheduleSelection() {
+    clearTimeout(selectionTimer);
+    // Native selection can settle after pointerup, particularly with browser
+    // selection tools. Never interrupt dragging or editing a toolbar note.
+    if (selecting || document.activeElement === toolbar.host || document.hidden) return;
+    selectionTimer = setTimeout(() => {
+      if (
+        !disposed &&
+        !selecting &&
+        document.activeElement !== toolbar.host &&
+        document.getSelection() &&
+        !document.getSelection()!.isCollapsed
+      )
+        select();
+    }, 120);
+  }
+  const onPointerDown = (event: Event) => {
+    if (!event.composedPath().includes(toolbar.host)) selecting = true;
+  };
+  const onPointerUp = (event: Event) => {
+    selecting = false;
+    if (event.composedPath().includes(toolbar.host)) return;
+    select(event);
+    scheduleSelection();
+  };
+  const onSelectionChange = () => {
+    // Keep the saved range and note UI when toolbar inputs take focus.
+    if (document.getSelection()?.isCollapsed) return;
+    scheduleSelection();
+  };
+  const onFocus = () => {
+    selecting = false;
+    scheduleSelection();
+  };
+  // Listen before the host's bubbling handlers, which can swallow selection events.
+  document.addEventListener('pointerdown', onPointerDown, true);
+  document.addEventListener('pointerup', onPointerUp, true);
+  document.addEventListener('selectionchange', onSelectionChange);
+  document.addEventListener('keyup', onKeyUp, true);
+  window.addEventListener('focus', onFocus);
   const observer = new MutationObserver(schedulePaint);
   observer.observe(document.documentElement, {
     childList: true,
     subtree: true,
     characterData: true,
   });
-  const urlTimer = setInterval(schedulePaint, 800);
+  let currentPath = location.pathname;
+  const urlTimer = setInterval(() => {
+    if (currentPath !== location.pathname) {
+      currentPath = location.pathname;
+      toolbar.hide();
+      schedulePaint();
+    }
+  }, 800);
   const unsubscribe = storage.subscribe(() => void refresh());
   void refresh();
   return () => {
     disposed = true;
     clearTimeout(timer);
+    clearTimeout(selectionTimer);
     clearInterval(urlTimer);
     observer.disconnect();
-    document.removeEventListener('pointerup', select);
-    document.removeEventListener('keyup', onKeyUp);
+    document.removeEventListener('pointerdown', onPointerDown, true);
+    document.removeEventListener('pointerup', onPointerUp, true);
+    document.removeEventListener('selectionchange', onSelectionChange);
+    document.removeEventListener('keyup', onKeyUp, true);
+    window.removeEventListener('focus', onFocus);
     toolbar.destroy();
     style.remove();
     names.forEach((color) => CSS.highlights.delete(`ai-notebook-${color}`));

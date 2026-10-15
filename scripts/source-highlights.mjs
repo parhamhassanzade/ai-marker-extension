@@ -26,6 +26,14 @@ try {
   // First highlight works with the notebook panel closed, using a real mouse drag.
   const paragraph = chat.locator('[data-message-id="a1"] p').first();
   await paragraph.waitFor();
+  await chat.waitForFunction(() => document.querySelector('#ai-marker-toolbar'));
+  // Simulate a SPA discarding injected UI and swallowing bubbling selection events.
+  await chat.evaluate(() => {
+    document.querySelector('#ai-marker-toolbar').remove();
+    document
+      .querySelector('main')
+      .addEventListener('pointerup', (event) => event.stopPropagation());
+  });
   const bounds = await paragraph.evaluate((root) => {
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     walker.nextNode();
@@ -101,8 +109,56 @@ try {
     notebookId,
   );
   await expect.poll(coloredRanges).toEqual([]);
+  // A long answer can have a markdown opening followed by plain sections. The
+  // content boundary must include the latter, before and after DOM replacement.
+  await chat.bringToFront();
+  await chat.evaluate(() => {
+    const answer = document.querySelector('[data-message-id="a1"]');
+    answer.querySelector('.prose').className = 'markdown';
+    const later = document.createElement('section');
+    later.innerHTML =
+      '<h2>Later section</h2><p data-late-answer>Highlight this final sentence.</p>';
+    answer.append(later);
+  });
+  // Some browser selection tools never send pointerup to the document. Replace
+  // the answer DOM and select through the native Selection API without a mouse.
+  await chat.evaluate(() => {
+    document.querySelector('#ai-marker-toolbar').remove();
+    const answer = document.querySelector('[data-message-id="a1"]');
+    const clone = answer.cloneNode(true);
+    answer.replaceWith(clone);
+    const range = document.createRange();
+    range.selectNodeContents(clone.querySelector('[data-late-answer]'));
+    getSelection().removeAllRanges();
+    getSelection().addRange(range);
+    document.dispatchEvent(new Event('selectionchange'));
+  });
+  await expect(chat.locator('#ai-marker-toolbar')).toBeVisible();
+  await chat.getByRole('button', { name: '🔴 Important', exact: true }).click();
+  await expect
+    .poll(() =>
+      panel.evaluate(
+        async () =>
+          (await chrome.runtime.sendMessage({ type: 'list' })).data.notebooks[0].highlights.length,
+      ),
+    )
+    .toBe(1);
+  await expect
+    .poll(() =>
+      panel.evaluate(
+        async () =>
+          (await chrome.runtime.sendMessage({ type: 'list' })).data.notebooks[0].highlights[0].text,
+      ),
+    )
+    .toBe('Highlight this final sentence.');
+  const lateDownload = panel.waitForEvent('download');
+  await panel.getByRole('button', { name: 'Save study PDF', exact: true }).click();
+  await (await lateDownload).saveAs('artifacts/late-answer-highlight.pdf');
+  expect((await readPdfText('artifacts/late-answer-highlight.pdf')).text).toContain(
+    'Highlight this final sentence.',
+  );
   console.log(
-    'PASS: main-page mouse selection, note, saved notebook/PDF, reload restoration, clear',
+    'PASS: toolbar/event recovery, mouse and selectionchange-only selection, replaced answer DOM, note, notebook/PDF, reload, clear',
   );
 } finally {
   await context.close();

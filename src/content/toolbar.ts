@@ -110,6 +110,8 @@ export function createToolbar() {
     hide,
     show(rect: DOMRect, nextActions: Actions) {
       if (busy) return;
+      // A host-page rerender can remove extension UI without unloading this script.
+      if (!host.isConnected) document.documentElement.append(host);
       actions = nextActions;
       textarea.value = '';
       noteBox.style.display = 'none';

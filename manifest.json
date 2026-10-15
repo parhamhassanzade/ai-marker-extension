@@ -1,10 +1,15 @@
 {
   "manifest_version": 3,
   "name": "AI Notebook",
-  "version": "3.0.0",
+  "version": "3.0.3",
   "description": "Turn AI conversations into chaptered study notebooks with highlights, notes, and PDF export.",
   "minimum_chrome_version": "116",
-  "permissions": ["storage", "activeTab", "sidePanel", "scripting"],
+  "permissions": [
+    "storage",
+    "activeTab",
+    "sidePanel",
+    "scripting"
+  ],
   "background": {
     "service_worker": "background.js",
     "type": "module"
@@ -18,8 +23,13 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://chat.openai.com/*", "https://chatgpt.com/*"],
-      "js": ["content.js"],
+      "matches": [
+        "https://chat.openai.com/*",
+        "https://chatgpt.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ],
@@ -35,5 +45,8 @@
   "side_panel": {
     "default_path": "sidepanel.html"
   },
-  "host_permissions": ["https://chatgpt.com/*", "https://chat.openai.com/*"]
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*"
+  ]
 }
