@@ -79,7 +79,7 @@ try {
   await panel.getByRole('button', { name: 'Read', exact: true }).click();
   await expect(panel.locator('[data-notebook-message-id]')).toHaveCount(4);
   await panel.getByText('About AI Notebook', { exact: true }).click();
-  const supportLink = panel.getByRole('link', {
+  const supportLink = panel.locator('.about-support').getByRole('link', {
     name: 'Support AI Notebook on Ko-fi (opens in a new tab)',
   });
   await expect(supportLink).toHaveAttribute('href', 'https://ko-fi.com/parham3752');

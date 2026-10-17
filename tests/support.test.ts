@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { DONATION_URL } from '../src/config';
-import { AboutSupport, ExportSupport } from '../src/notebook/Support';
+import { AboutSupport, ExportSupport, MainSupport } from '../src/notebook/Support';
 import {
   exportWithSupport,
   shouldShowSupport,
@@ -89,8 +89,9 @@ it('does not delay exports for slow storage or convert preference failures into 
   await Promise.resolve();
   expect(updated).not.toHaveBeenCalled();
 });
-it('uses the one config URL and safe new-tab attributes on both UI links', () => {
+it('uses the one config URL and safe new-tab attributes on all UI links', () => {
   const html =
+    renderToStaticMarkup(createElement(MainSupport)) +
     renderToStaticMarkup(createElement(AboutSupport)) +
     renderToStaticMarkup(
       createElement(ExportSupport, {
@@ -100,7 +101,7 @@ it('uses the one config URL and safe new-tab attributes on both UI links', () =>
     );
   document.body.innerHTML = html;
   const links = [...document.querySelectorAll('a')];
-  expect(links).toHaveLength(2);
+  expect(links).toHaveLength(3);
   for (const link of links) {
     expect(link.getAttribute('href')).toBe(DONATION_URL);
     expect(link.target).toBe('_blank');

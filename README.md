@@ -89,3 +89,5 @@ For development commands and release checks, see [Development](docs/development.
 ## Support
 
 AI Notebook is free and works entirely on your device. If it's useful to you, you can support its development on [Ko-fi](https://ko-fi.com/parham3752). Thank you!
+
+The optional support link is available in the extension header and About area, and in the footer of exported PDFs.

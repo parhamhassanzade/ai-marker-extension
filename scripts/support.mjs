@@ -2,6 +2,7 @@ import { chromium, expect } from '@playwright/test';
 import { mkdtemp, rm, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { readPdfText } from './pdf-text.mjs';
 
 const profile = await mkdtemp(path.join(tmpdir(), 'ai-notebook-support-'));
 const extensionPath = path.resolve('dist');
@@ -43,6 +44,13 @@ try {
   await panel.setViewportSize({ width: 430, height: 1000 });
   await panel.goto(`chrome-extension://${id}/sidepanel.html`);
   await chat.bringToFront();
+  const mainLink = panel.locator('.main-support a');
+  await expect(mainLink).toBeVisible();
+  await expect(mainLink).toHaveAttribute('href', 'https://ko-fi.com/parham3752');
+  await panel.setViewportSize({ width: 280, height: 1000 });
+  await expect(mainLink).toBeVisible();
+  expect(await panel.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await panel.setViewportSize({ width: 430, height: 1000 });
   const note = panel.getByRole('complementary', { name: 'Optional project support' });
   const save = panel.getByRole('button', { name: 'Save study PDF', exact: true });
   const state = () =>
@@ -71,6 +79,7 @@ try {
     await save.click();
     const download = await downloading;
     expect(await download.failure()).toBeNull();
+    expect((await readPdfText(await download.path())).text).toContain('Support on Ko-fi');
     await expect(
       panel.getByRole('status').filter({ hasText: 'Study PDF exported.' }),
     ).toBeVisible();
@@ -89,7 +98,7 @@ try {
   const links = panel.getByRole('link', {
     name: 'Support AI Notebook on Ko-fi (opens in a new tab)',
   });
-  await expect(links).toHaveCount(2);
+  await expect(links).toHaveCount(3);
   for (const link of await links.all()) {
     await expect(link).toHaveAttribute('href', 'https://ko-fi.com/parham3752');
     await expect(link).toHaveAttribute('target', '_blank');
@@ -102,11 +111,13 @@ try {
   await expect(panel.locator('.about-support a')).toHaveCSS('outline-style', 'solid');
   await expect(panel.locator('.about-support a')).toHaveCSS('outline-width', '2px');
   await mkdir('artifacts', { recursive: true });
+  await panel.locator('.app-header').screenshot({ path: 'artifacts/support-header-light.png' });
   await note.screenshot({ path: 'artifacts/support-light.png' });
   await panel.getByRole('button', { name: 'Switch to dark theme' }).click();
   await panel.evaluate(() => {
     document.documentElement.dir = 'rtl';
   });
+  await panel.locator('.app-header').screenshot({ path: 'artifacts/support-header-dark-rtl.png' });
   await note.screenshot({ path: 'artifacts/support-dark-rtl.png' });
   const fits = await note.evaluate((element) => element.scrollWidth <= element.clientWidth);
   expect(fits).toBe(true);

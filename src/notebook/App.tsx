@@ -28,7 +28,7 @@ import {
   ensureContentScript,
 } from './connection';
 import { NotebookView } from './NotebookView';
-import { AboutSupport, ExportSupport } from './Support';
+import { AboutSupport, ExportSupport, MainSupport } from './Support';
 import {
   support,
   exportWithSupport,
@@ -239,17 +239,20 @@ export default function App() {
           </span>
           AI Notebook
         </div>
-        <button
-          className="icon-button"
-          aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'}
-          onClick={() => {
-            const next = !dark;
-            setDark(next);
-            void settings.setTheme(next ? 'dark' : 'light').catch(() => undefined);
-          }}
-        >
-          {dark ? <Sun size={18} /> : <Moon size={18} />}
-        </button>
+        <div className="header-actions">
+          <MainSupport />
+          <button
+            className="icon-button"
+            aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'}
+            onClick={() => {
+              const next = !dark;
+              setDark(next);
+              void settings.setTheme(next ? 'dark' : 'light').catch(() => undefined);
+            }}
+          >
+            {dark ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
+        </div>
       </header>
       {isToolbarPopup && (
         <button

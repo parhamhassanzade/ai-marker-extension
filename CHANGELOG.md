@@ -2,6 +2,7 @@
 
 ## Unreleased — hardening
 
+- Made the optional support link visible in the main extension header and added a clickable Ko-fi link to every exported PDF page footer, using the shared donation URL.
 - Added an optional Ko-fi link in About and a dismissible inline thank-you after the third successful PDF export. The counter and permanent dismissal stay local; there are no new permissions, analytics, background network requests, pop-ups, or feature restrictions. The Ko-fi page opens only when its link is clicked.
 - Fixed manifest formatting.
 - Added CI for pushes and pull requests: install, typecheck, unit tests, build, formatting, and headless Chromium smoke.

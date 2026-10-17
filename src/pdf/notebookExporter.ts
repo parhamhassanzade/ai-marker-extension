@@ -1,4 +1,5 @@
 import { jsPDF } from 'jspdf';
+import { DONATION_URL } from '../config';
 import { hasArabic, isRtlParagraph, visualRuns } from './bidirectional';
 import { resolveAnchor } from '../content/highlighter';
 import { overviewOf } from '../knowledge/overview';
@@ -326,6 +327,13 @@ export function createNotebookPdf(notebook: Notebook, font?: string, arabicFont?
     pdf.setTextColor(110, 117, 105);
     pdf.text('AI Notebook · Ideas worth keeping', left, 290);
     pdf.text(`${page} / ${total}`, 191, 290, { align: 'right' });
+    const supportLabel = 'Support on Ko-fi';
+    const supportWidth = pdf.getTextWidth(supportLabel);
+    const supportX = 105 - supportWidth / 2;
+    pdf.setTextColor(87, 107, 75);
+    pdf.textWithLink(supportLabel, supportX, 290, { url: DONATION_URL });
+    pdf.setDrawColor(87, 107, 75);
+    pdf.line(supportX, 291, supportX + supportWidth, 291);
   }
   return pdf;
 }

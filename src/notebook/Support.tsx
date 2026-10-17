@@ -28,6 +28,13 @@ export function AboutSupport() {
     </details>
   );
 }
+export function MainSupport() {
+  return (
+    <span className="main-support">
+      <DonationLink>Support ♥</DonationLink>
+    </span>
+  );
+}
 export function ExportSupport({
   state,
   onChange,

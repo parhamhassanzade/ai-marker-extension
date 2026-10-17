@@ -1,6 +1,7 @@
 import { it, expect } from 'vitest';
 import { createNotebookPdf } from '../src/pdf/notebookExporter';
 import type { Notebook } from '../src/types';
+import { DONATION_URL } from '../src/config';
 it('paginates very long answers and retains notes and page numbers', () => {
   const notebook: Notebook = {
     id: 'n',
@@ -33,6 +34,10 @@ it('paginates very long answers and retains notes and page numbers', () => {
   const pdf = createNotebookPdf(notebook);
   expect(pdf.getNumberOfPages()).toBeGreaterThan(10);
   expect(pdf.output('arraybuffer').byteLength).toBeGreaterThan(1000);
+  // URI annotations remain visible outside compressed content streams. Exactly
+  // one donation annotation per page verifies the actual clickable PDF output.
+  const donationLinks = pdf.output().split(`/URI (${DONATION_URL})`).length - 1;
+  expect(donationLinks).toBe(pdf.getNumberOfPages());
 });
 
 it('rejects empty notebooks so metadata-only output cannot be downloaded', () => {
