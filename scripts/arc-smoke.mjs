@@ -2,8 +2,8 @@ import { chromium, expect } from '@playwright/test';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-const profile = await mkdtemp(path.join(tmpdir(), 'ai-notebook-arc-'));
-const extension = path.resolve('build/arc');
+const profile = await mkdtemp(path.join(tmpdir(), 'ai-notebook-merged-'));
+const extension = path.resolve('dist');
 const context = await chromium.launchPersistentContext(profile, {
   channel: 'chromium',
   headless: true,
@@ -11,83 +11,62 @@ const context = await chromium.launchPersistentContext(profile, {
 });
 try {
   const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
+  const id = new URL(worker.url()).hostname;
   const fixture = await readFile('tests/fixtures/chatgpt-semantic.html', 'utf8');
   await context.route('https://chatgpt.com/**', (route) =>
     route.fulfill({ body: fixture, contentType: 'text/html; charset=utf-8' }),
   );
   const chat = await context.newPage();
   await chat.goto('https://chatgpt.com/c/arc-chat');
-  const browserSession = await context.browser().newBrowserCDPSession();
-  await worker.evaluate(() => chrome.action.openPopup());
-  let popupTarget;
-  await expect
-    .poll(async () => {
-      popupTarget = (await browserSession.send('Target.getTargets')).targetInfos.find((target) =>
-        target.url.endsWith('/sidepanel.html'),
-      );
-      return !!popupTarget;
-    })
-    .toBe(true);
-  const { sessionId } = await browserSession.send('Target.attachToTarget', {
-    targetId: popupTarget.targetId,
-    flatten: false,
+  const launcher = await context.newPage();
+  await launcher.goto(`chrome-extension://${id}/sidepanel.html`);
+  const source = await worker.evaluate(async () => {
+    const [tab] = await chrome.tabs.query({ url: 'https://chatgpt.com/*' });
+    return { tabId: tab.id, windowId: tab.windowId };
   });
-  let messageId = 0;
-  async function popupEvaluate(expression) {
-    const id = ++messageId;
-    const result = new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        browserSession.off('Target.receivedMessageFromTarget', listener);
-        reject(new Error('Popup evaluation timed out'));
-      }, 5000);
-      const listener = (event) => {
-        if (event.sessionId !== sessionId) return;
-        const message = JSON.parse(event.message);
-        if (message.id !== id) return;
-        clearTimeout(timeout);
-        browserSession.off('Target.receivedMessageFromTarget', listener);
-        if (message.error) reject(new Error(message.error.message));
-        else resolve(message.result.result.value);
-      };
-      browserSession.on('Target.receivedMessageFromTarget', listener);
-    });
-    await browserSession.send('Target.sendMessageToTarget', {
-      sessionId,
-      message: JSON.stringify({
-        id,
-        method: 'Runtime.evaluate',
-        params: { expression, returnByValue: true, awaitPromise: true },
-      }),
-    });
-    return result;
-  }
+  const launch = () =>
+    launcher.evaluate(
+      (source) => chrome.runtime.sendMessage({ type: 'openNotebookSurface', ...source }),
+      source,
+    );
+  expect(
+    await worker.evaluate(() => chrome.runtime.getManifest().action.default_popup),
+  ).toBeUndefined();
+  expect(await launch()).toMatchObject({ ok: true, surface: 'side-panel' });
+  await worker.evaluate(async (windowId) => chrome.sidePanel.close({ windowId }), source.windowId);
   await expect
     .poll(() =>
-      popupEvaluate(
-        `Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Create notebook' && !button.disabled)`,
+      worker.evaluate(
+        async () => (await chrome.runtime.getContexts({ contextTypes: ['SIDE_PANEL'] })).length,
       ),
     )
-    .toBe(true);
-  const popupOpened = context.waitForEvent('page');
-  await popupEvaluate(
-    `Array.from(document.querySelectorAll('button')).find(button => button.textContent.includes('Keep notebook open')).click(); true`,
-  );
-  const panel = await popupOpened;
-  const windowId = await panel.evaluate(async () => (await chrome.windows.getCurrent()).id);
+    .toBe(0);
+  // Simulate a Chromium shell exposing an API which silently does nothing.
+  await worker.evaluate(() => {
+    chrome.sidePanel.open = async () => {};
+  });
+  let opened = context.waitForEvent('page');
+  expect(await launch()).toMatchObject({ ok: true, surface: 'window' });
+  const panel = await opened;
   await expect(panel.getByRole('button', { name: 'Create notebook', exact: true })).toBeEnabled();
+  expect(new URL(panel.url()).searchParams.get('sourceWindow')).toBe(String(source.windowId));
   await panel.getByRole('button', { name: 'Create notebook', exact: true }).click();
   await panel.getByRole('button', { name: 'Read', exact: true }).click();
   await expect(panel.locator('[data-notebook-message-id]')).toHaveCount(4);
-  await panel.getByText('About AI Notebook', { exact: true }).click();
-  const supportLink = panel.locator('.about-support').getByRole('link', {
-    name: 'Support AI Notebook on Ko-fi (opens in a new tab)',
+  await panel.getByText('Notebook settings', { exact: true }).click();
+  await panel.getByLabel('Open notebook in:').selectOption('window');
+  await expect(panel.getByRole('status').filter({ hasText: 'Saved.' })).toBeVisible();
+  await panel.reload();
+  await panel.getByText('Notebook settings', { exact: true }).click();
+  await expect(panel.getByLabel('Open notebook in:')).toHaveValue('window');
+  const count = context.pages().length;
+  await worker.evaluate(() => {
+    chrome.sidePanel.open = async () => {
+      throw new Error('Panel must be bypassed');
+    };
   });
-  await expect(supportLink).toHaveAttribute('href', 'https://ko-fi.com/parham3752');
-  await expect(supportLink).toHaveAttribute('target', '_blank');
-  await expect(supportLink).toHaveAttribute('rel', 'noopener noreferrer');
-  expect(await worker.evaluate(async (id) => (await chrome.windows.get(id)).type, windowId)).toBe(
-    'popup',
-  );
+  expect(await launch()).toMatchObject({ ok: true, surface: 'window' });
+  expect(context.pages()).toHaveLength(count);
   await chat.evaluate(() => history.pushState({}, '', '/g/g-project/c/arc-old'));
   await expect(panel.getByRole('button', { name: 'Create notebook', exact: true })).toBeEnabled();
   await panel.getByRole('button', { name: 'Create notebook', exact: true }).click();
@@ -99,8 +78,30 @@ try {
       ),
     )
     .toBe('arc-old');
+  await panel.close();
+  await launcher.evaluate(() =>
+    chrome.runtime.sendMessage({ type: 'setNotebookSurface', value: 'auto' }),
+  );
+  opened = context.waitForEvent('page');
+  expect(await launch()).toMatchObject({ ok: true, surface: 'window' });
+  await (await opened).close();
+  await worker.evaluate(() => {
+    chrome.windows.create = async () => {
+      throw new Error('Windows unsupported');
+    };
+  });
+  opened = context.waitForEvent('page');
+  expect(await launch()).toMatchObject({ ok: true, surface: 'window' });
+  const tabFallback = await opened;
+  expect(await tabFallback.evaluate(async () => (await chrome.windows.getCurrent()).type)).toBe(
+    'normal',
+  );
+  await expect(tabFallback.getByRole('link', { name: 'Open source conversation' })).toHaveAttribute(
+    'href',
+    'https://chatgpt.com/g/g-project/c/arc-old',
+  );
   console.log(
-    'PASS Arc distribution on Chromium: native toolbar popup opens, Keep notebook open creates a connected window, notebook connects to original window, captures old/project conversations after SPA navigation',
+    'PASS shared Chromium package: real side panel, silent and rejected API fallback, window reuse, saved UI preference across reload, original-source SPA capture, rejected window → notebook tab',
   );
 } finally {
   await context.close();

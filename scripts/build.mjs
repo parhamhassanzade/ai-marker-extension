@@ -19,9 +19,11 @@ for (const [entry, name] of [
 }
 const chromeManifest = JSON.parse(await readFile('manifest.json', 'utf8'));
 await writeFile('dist/manifest.json', JSON.stringify(chromeManifest, null, 2) + '\n');
+// Remove the retired generated Arc target; dist serves every Chromium browser.
+await rm('build/arc', { recursive: true, force: true });
 // Keep dist as the existing Chrome install path. Other distributions live beside
 // it, so loading dist never accidentally includes another complete extension.
-for (const target of ['arc', 'firefox']) {
+for (const target of ['firefox']) {
   const directory = `build/${target}`;
   await rm(directory, { recursive: true, force: true });
   await mkdir(directory, { recursive: true });
@@ -29,7 +31,6 @@ for (const target of ['arc', 'firefox']) {
   const manifest = structuredClone(chromeManifest);
   manifest.permissions = manifest.permissions.filter((p) => p !== 'sidePanel');
   delete manifest.side_panel;
-  if (target === 'arc') manifest.action.default_popup = 'sidepanel.html';
   if (target === 'firefox') {
     delete manifest.minimum_chrome_version;
     manifest.background = { scripts: ['background.js'] };

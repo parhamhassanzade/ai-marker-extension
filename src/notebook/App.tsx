@@ -1,3 +1,4 @@
+import { SurfaceSettings } from './SurfaceSettings';
 import { openNotebookWindow } from '../browser/notebookWindow';
 import { extension, isExtensionContext } from '../browser/api';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -28,7 +29,7 @@ import {
   ensureContentScript,
 } from './connection';
 import { NotebookView } from './NotebookView';
-import { AboutSupport, ExportSupport, MainSupport } from './Support';
+import { AboutSupport, ExportSupport, MainSupport, FeedbackLink } from './Support';
 import {
   support,
   exportWithSupport,
@@ -240,6 +241,9 @@ export default function App() {
           AI Notebook
         </div>
         <div className="header-actions">
+          <span className="main-feedback">
+            <FeedbackLink>Feedback</FeedbackLink>
+          </span>
           <MainSupport />
           <button
             className="icon-button"
@@ -567,6 +571,9 @@ export default function App() {
             New notebook for this conversation
           </button>
           <footer>Stored on this device · Yours to keep</footer>
+          {isExtensionContext() && 'side_panel' in extension.runtime.getManifest() && (
+            <SurfaceSettings />
+          )}
           <AboutSupport />
         </>
       )}

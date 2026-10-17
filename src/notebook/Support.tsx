@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { DONATION_URL } from '../config';
+import { DONATION_URL, FEEDBACK_EMAIL, FEEDBACK_URL } from '../config';
 import { support, shouldShowSupport, type SupportState } from '../storage/support';
 
 export function DonationLink({ children }: { children: React.ReactNode }) {
@@ -14,6 +14,13 @@ export function DonationLink({ children }: { children: React.ReactNode }) {
     </a>
   );
 }
+export function FeedbackLink({ children }: { children: React.ReactNode }) {
+  return (
+    <a href={FEEDBACK_URL} aria-label={`Email feedback or report a problem to ${FEEDBACK_EMAIL}`}>
+      {children}
+    </a>
+  );
+}
 export function AboutSupport() {
   return (
     <details className="about-support">
@@ -23,6 +30,12 @@ export function AboutSupport() {
         <p>
           AI Notebook is free and works locally on your device. If it helps you, you can support its
           development.
+        </p>
+        <p>
+          Feedback or a problem?{' '}
+          <FeedbackLink>
+            <bdi dir="ltr">{FEEDBACK_EMAIL}</bdi>
+          </FeedbackLink>
         </p>
       </div>
     </details>

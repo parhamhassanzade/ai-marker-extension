@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import { DONATION_URL } from '../config';
+import { DONATION_URL, FEEDBACK_EMAIL, FEEDBACK_URL } from '../config';
 import { hasArabic, isRtlParagraph, visualRuns } from './bidirectional';
 import { resolveAnchor } from '../content/highlighter';
 import { overviewOf } from '../knowledge/overview';
@@ -321,19 +321,25 @@ export function createNotebookPdf(notebook: Notebook, font?: string, arabicFont?
   for (let page = 1; page <= total; page++) {
     pdf.setPage(page);
     pdf.setDrawColor(215, 221, 210);
-    pdf.line(left, 284, 191, 284);
+    pdf.line(left, 282, 191, 282);
     pdf.setFont(font ? 'NotoSans' : 'helvetica');
     pdf.setFontSize(8);
     pdf.setTextColor(110, 117, 105);
-    pdf.text('AI Notebook · Ideas worth keeping', left, 290);
-    pdf.text(`${page} / ${total}`, 191, 290, { align: 'right' });
+    pdf.text('AI Notebook · Ideas worth keeping', left, 287);
+    pdf.text(`${page} / ${total}`, 191, 287, { align: 'right' });
     const supportLabel = 'Support on Ko-fi';
     const supportWidth = pdf.getTextWidth(supportLabel);
     const supportX = 105 - supportWidth / 2;
     pdf.setTextColor(87, 107, 75);
-    pdf.textWithLink(supportLabel, supportX, 290, { url: DONATION_URL });
+    pdf.textWithLink(supportLabel, supportX, 287, { url: DONATION_URL });
     pdf.setDrawColor(87, 107, 75);
-    pdf.line(supportX, 291, supportX + supportWidth, 291);
+    pdf.line(supportX, 288, supportX + supportWidth, 288);
+    pdf.setFontSize(7);
+    const feedbackLabel = `Feedback or problems: ${FEEDBACK_EMAIL}`;
+    const feedbackWidth = pdf.getTextWidth(feedbackLabel);
+    const feedbackX = 105 - feedbackWidth / 2;
+    pdf.textWithLink(feedbackLabel, feedbackX, 292, { url: FEEDBACK_URL });
+    pdf.line(feedbackX, 293, feedbackX + feedbackWidth, 293);
   }
   return pdf;
 }

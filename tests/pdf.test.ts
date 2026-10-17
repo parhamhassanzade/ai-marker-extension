@@ -1,7 +1,7 @@
 import { it, expect } from 'vitest';
 import { createNotebookPdf } from '../src/pdf/notebookExporter';
 import type { Notebook } from '../src/types';
-import { DONATION_URL } from '../src/config';
+import { DONATION_URL, FEEDBACK_URL } from '../src/config';
 it('paginates very long answers and retains notes and page numbers', () => {
   const notebook: Notebook = {
     id: 'n',
@@ -38,6 +38,7 @@ it('paginates very long answers and retains notes and page numbers', () => {
   // one donation annotation per page verifies the actual clickable PDF output.
   const donationLinks = pdf.output().split(`/URI (${DONATION_URL})`).length - 1;
   expect(donationLinks).toBe(pdf.getNumberOfPages());
+  expect(pdf.output().split(`/URI (${FEEDBACK_URL})`).length - 1).toBe(pdf.getNumberOfPages());
 });
 
 it('rejects empty notebooks so metadata-only output cannot be downloaded', () => {

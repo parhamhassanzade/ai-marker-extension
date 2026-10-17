@@ -11,11 +11,11 @@ npm ci
 npm run build
 ```
 
-| Browser                                    | Load directory   | Notebook interface                         |
-| ------------------------------------------ | ---------------- | ------------------------------------------ |
-| Chrome 116+ / Edge with the side-panel API | `dist/`          | Native side panel                          |
-| Arc desktop                                | `build/arc/`     | Toolbar popup and separate notebook window |
-| Firefox desktop 140+                       | `build/firefox/` | Native sidebar                             |
+| Browser                                    | Load directory   | Notebook interface                     |
+| ------------------------------------------ | ---------------- | -------------------------------------- |
+| Chrome 116+ / Edge with the side-panel API | `dist/`          | Native side panel                      |
+| Arc desktop                                | `dist/`          | Side panel or separate notebook window |
+| Firefox desktop 140+                       | `build/firefox/` | Native sidebar                         |
 
 ChatGPT is the only enabled AI platform. Supported hosts are `https://chatgpt.com` and `https://chat.openai.com`. Mobile browsers are not supported.
 
@@ -28,9 +28,11 @@ ChatGPT is the only enabled AI platform. Supported hosts are `https://chatgpt.co
 
 ### Arc
 
-1. Open `arc://extensions`, enable **Developer mode**, and load `build/arc/` unpacked.
+1. Install from the Chrome Web Store, or open `arc://extensions`, enable **Developer mode**, and load `dist/` unpacked.
 2. Open ChatGPT and click AI Notebook in the extensions menu.
-3. Use **Create notebook** in the popup. Choose **Keep notebook open** for a separate window connected to the originating browser window. A notebook-tab fallback is used if windows are rejected.
+3. The notebook opens in a side panel when the browser supports and opens it. Otherwise it opens a separate window connected to the originating browser window. A notebook tab is used if windows are rejected.
+
+Chrome, Edge, and Arc share the same package. Under **Notebook settings → Open notebook in:** choose **Automatic**, **Side panel**, or **Separate window**. The choice persists locally and applies to future launches. Automatic tries the side panel and verifies an open event or visible panel within 1.8 seconds; rejected, missing, or silent APIs fall back to the window. The Side panel preference also falls back if unavailable. Separate window bypasses the panel API. A cold worker reads the saved preference first; if the browser then rejects the panel gesture, it safely opens a window. No browser-name or user-agent detection is used.
 
 ### Firefox
 
@@ -44,7 +46,7 @@ Temporary add-ons are removed when Firefox restarts. The generated XPI is unsign
 
 After a rebuild, reload the extension in its extension manager and confirm **3.0.3**. The notebook reconnects to existing tabs and replaces outdated content scripts when possible. Refresh ChatGPT if needed; rebuilding files alone does not reload an installed worker.
 
-`npm run package` creates versioned Chrome/Arc ZIPs and a Firefox XPI in `packages/`. Use each browser's own build directory.
+`npm run package` creates one versioned Chrome ZIP (also for Edge and Arc) and a Firefox XPI in `packages/`. Chromium browsers share `dist/`; Firefox uses `build/firefox/`.
 
 ## Use your notebook
 
@@ -77,7 +79,7 @@ Annotations store the selected quote, message ID, offsets, and surrounding conte
 - Existing `aiMarker.v1` archives migrate on first access. The legacy blob is removed only after a successful IndexedDB commit, and migrated capture starts paused.
 - Permissions are `storage`, `activeTab`, `sidePanel` (Chrome/Edge), and `scripting`, with host access restricted to the two ChatGPT hosts. No broad `tabs` or `downloads` permission is requested.
 - “Full conversation” means **captured text**, not guaranteed server history. The scan is bounded to 60 steps; hidden branches, unexposed history, collapsed content, images, canvas documents, and other media cannot be recovered automatically. A stable scroll position is not proof of complete history.
-- Extraction depends on ChatGPT's changing page structure. Automated browser tests use realistic fixtures, not signed-in ChatGPT. Native Edge/Arc UI, signed-in ChatGPT, and Firefox releases need manual release checks. The Arc script tests its build in Chromium, not native Arc.
+- Extraction depends on ChatGPT's changing page structure. Automated browser tests use realistic fixtures, not signed-in ChatGPT. Native Edge/Arc UI, signed-in ChatGPT, and Firefox releases need manual release checks. The Arc compatibility script tests the shared package and fallback in Chromium, not native Arc.
 - Stable platform IDs are preferred. Positional IDs, regenerated answers, branches, and virtualized layouts have identity limitations. Ambiguous highlights can remain unpainted; saved notes are retained.
 - Temporary chats use an in-page UUID until matching turns establish a stable URL. Reloading an unsaved temporary chat can create a different notebook identity. Normal saved conversations preserve lifecycle state across reloads.
 - PDFs preserve text, code indentation, and line breaks. Rich Markdown appearance, formulas, media, and rich tables are not reproduced visually. Bundled fonts support Persian/Arabic, Latin, Greek, and Cyrillic; unsupported characters, including most CJK and emoji, become `[U+CODEPOINT]` tokens. Copy/search of joined Arabic glyphs varies by PDF reader.
@@ -91,3 +93,7 @@ For development commands and release checks, see [Development](docs/development.
 AI Notebook is free and works entirely on your device. If it's useful to you, you can support its development on [Ko-fi](https://ko-fi.com/parham3752). Thank you!
 
 The optional support link is available in the extension header and About area, and in the footer of exported PDFs.
+
+## Feedback and problems
+
+For feedback or to report a problem, email [parhamhassanzade@gmail.com](mailto:parhamhassanzade@gmail.com). Feedback links are also available in the extension header, About area, and exported PDF footer.

@@ -45,6 +45,11 @@ try {
   await panel.goto(`chrome-extension://${id}/sidepanel.html`);
   await chat.bringToFront();
   const mainLink = panel.locator('.main-support a');
+  await expect(panel.locator('.main-feedback a')).toBeVisible();
+  await expect(panel.locator('.main-feedback a')).toHaveAttribute(
+    'href',
+    'mailto:parhamhassanzade@gmail.com',
+  );
   await expect(mainLink).toBeVisible();
   await expect(mainLink).toHaveAttribute('href', 'https://ko-fi.com/parham3752');
   await panel.setViewportSize({ width: 280, height: 1000 });
@@ -79,7 +84,9 @@ try {
     await save.click();
     const download = await downloading;
     expect(await download.failure()).toBeNull();
-    expect((await readPdfText(await download.path())).text).toContain('Support on Ko-fi');
+    const exportedText = (await readPdfText(await download.path())).text;
+    expect(exportedText).toContain('Support on Ko-fi');
+    expect(exportedText).toContain('parhamhassanzade@gmail.com');
     await expect(
       panel.getByRole('status').filter({ hasText: 'Study PDF exported.' }),
     ).toBeVisible();
@@ -105,11 +112,19 @@ try {
     await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
   }
   const summary = panel.locator('.about-support summary');
+  const aboutDonation = panel
+    .locator('.about-support')
+    .getByRole('link', { name: 'Support AI Notebook on Ko-fi (opens in a new tab)' });
   await summary.focus();
   await panel.keyboard.press('Tab');
-  await expect(panel.locator('.about-support a')).toBeFocused();
-  await expect(panel.locator('.about-support a')).toHaveCSS('outline-style', 'solid');
-  await expect(panel.locator('.about-support a')).toHaveCSS('outline-width', '2px');
+  await expect(aboutDonation).toBeFocused();
+  await expect(aboutDonation).toHaveCSS('outline-style', 'solid');
+  await expect(aboutDonation).toHaveCSS('outline-width', '2px');
+  await panel.keyboard.press('Tab');
+  const aboutFeedback = panel.locator('.about-support a[href^="mailto:"]');
+  await expect(aboutFeedback).toBeFocused();
+  await expect(aboutFeedback).toHaveAttribute('href', 'mailto:parhamhassanzade@gmail.com');
+  await expect(aboutFeedback).toHaveCSS('outline-width', '2px');
   await mkdir('artifacts', { recursive: true });
   await panel.locator('.app-header').screenshot({ path: 'artifacts/support-header-light.png' });
   await note.screenshot({ path: 'artifacts/support-light.png' });

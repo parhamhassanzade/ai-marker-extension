@@ -1,3 +1,4 @@
+import { reportNotebookVisibility } from '../browser/surfaceVisibility';
 import { extension, isExtensionContext } from '../browser/api';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
@@ -15,3 +16,5 @@ if (
   !location.search
 )
   document.documentElement.classList.add('notebook-popup');
+
+reportNotebookVisibility();

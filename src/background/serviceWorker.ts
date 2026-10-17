@@ -1,4 +1,5 @@
 import { extension } from '../browser/api';
+import { SURFACE_PREFERENCE_KEY, surfacePreference } from '../browser/surfacePreference';
 import { configureNotebookSurface } from './notebookSurface';
 import { matchesHighlightSource } from './sourceAuthorization';
 import { isCommand } from '../storage/validation';
@@ -96,6 +97,55 @@ async function executeSupport(command: SupportCommand): Promise<SupportResult> {
 }
 extension.runtime.onMessage.addListener((command: unknown, sender, respond) => {
   if (sender.id !== extension.runtime.id) return false;
+  if (
+    typeof command === 'object' &&
+    command &&
+    'type' in command &&
+    (command.type === 'setNotebookSurface' || command.type === 'openNotebookSurface')
+  ) {
+    if (!sender.url?.startsWith(extension.runtime.getURL('/')) || !notebookSurfaces) {
+      respond({ ok: false, error: 'Open notebook settings in the Chromium notebook.' });
+      return false;
+    }
+    if (command.type === 'setNotebookSurface') {
+      if (
+        !('value' in command) ||
+        typeof command.value !== 'string' ||
+        !['auto', 'side-panel', 'window'].includes(command.value)
+      ) {
+        respond({ ok: false, error: 'Invalid notebook surface.' });
+        return false;
+      }
+      const value = surfacePreference(command.value);
+      const task = queue.then(async () => {
+        await extension.storage.local.set({ [SURFACE_PREFERENCE_KEY]: value });
+        notebookSurfaces.setPreference(value);
+        return { ok: true };
+      });
+      queue = task.catch(() => undefined);
+      void task.then(respond, (error: Error) => respond({ ok: false, error: error.message }));
+    } else {
+      if (
+        !('tabId' in command) ||
+        !('windowId' in command) ||
+        !Number.isSafeInteger(command.tabId) ||
+        !Number.isSafeInteger(command.windowId) ||
+        Number(command.tabId) < 0 ||
+        Number(command.windowId) < 0
+      ) {
+        respond({ ok: false, error: 'Invalid source tab.' });
+        return false;
+      }
+      // Launch outside the storage queue to retain the user's click gesture.
+      void notebookSurfaces
+        .open({ id: command.tabId, windowId: command.windowId } as chrome.tabs.Tab)
+        .then(
+          (surface) => respond({ ok: true, surface }),
+          (error: Error) => respond({ ok: false, error: error.message }),
+        );
+    }
+    return true;
+  }
   if (isSupportCommand(command)) {
     // Only extension pages may record exports or dismiss the note. Content
     // scripts must not be able to increment this counter or change preferences.
@@ -125,7 +175,9 @@ extension.runtime.onMessage.addListener((command: unknown, sender, respond) => {
     typeof command === 'object' &&
     command &&
     'type' in command &&
-    (command.type === 'notebooksChanged' || command.type === 'captureError')
+    (command.type === 'notebooksChanged' ||
+      command.type === 'captureError' ||
+      command.type === 'probeNotebookVisibility')
   )
     return false;
   if (!isCommand(command)) {
@@ -167,4 +219,4 @@ extension.runtime.onMessage.addListener((command: unknown, sender, respond) => {
 void extension.storage.local
   .setAccessLevel?.({ accessLevel: 'TRUSTED_CONTEXTS' })
   .catch(console.error);
-configureNotebookSurface();
+const notebookSurfaces = configureNotebookSurface();

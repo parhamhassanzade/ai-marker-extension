@@ -44,6 +44,7 @@ beforeEach(async () => {
   local = {};
   vi.stubGlobal('chrome', {
     tabs: { query: async () => [] },
+    action: { onClicked: { addListener: () => undefined } },
     sidePanel: { setPanelBehavior: async () => undefined },
     runtime: {
       id: 'test-extension',
@@ -304,4 +305,21 @@ it('rejects support commands from content scripts even with the extension sender
   );
   expect(result).toMatchObject({ ok: false });
   expect(local[SUPPORT_STORAGE_KEY]).toBeUndefined();
+});
+it('persists and validates notebook surface overrides without modifying notebooks', async () => {
+  expect((await send({ type: 'setNotebookSurface', value: 'window' })).ok).toBe(true);
+  expect(local['aiNotebook.surface']).toBe('window');
+  expect((await send({ type: 'setNotebookSurface', value: 'invalid' })).ok).toBe(false);
+  expect(local['aiNotebook.surface']).toBe('window');
+  expect(await database.readDatabase()).toBeUndefined();
+});
+it('rejects surface preference changes from content scripts', () => {
+  const respond = vi.fn();
+  listener(
+    { type: 'setNotebookSurface', value: 'window' },
+    { id: 'test-extension', url: 'https://chatgpt.com/c/c', tab: { id: 1 } as chrome.tabs.Tab },
+    respond,
+  );
+  expect(respond).toHaveBeenCalledWith(expect.objectContaining({ ok: false }));
+  expect(local['aiNotebook.surface']).toBeUndefined();
 });

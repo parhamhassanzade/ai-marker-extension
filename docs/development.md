@@ -22,7 +22,7 @@ CI runs on pushes and pull requests using Node 24 on Ubuntu, including a headles
 Additional checks:
 
 - `npm run test:persian`: Persian PDF browser download.
-- `npm run test:arc`: Arc distribution in Chromium, including popup and persistent window; native Arc UI still needs manual verification.
+- `npm run test:arc`: shared Chromium distribution, including actual side-panel opening, silent/rejected API fallback, saved surface choice, and persistent window; native Arc UI still needs manual verification.
 - `npm run test:firefox`: actual headless Firefox with a temporary add-on and local HTTPS fixture. Requires OpenSSL and geckodriver; defaults to `/Applications/Firefox.app/Contents/MacOS/firefox`, overridable with `FIREFOX_BINARY`.
 - `npm run lint:firefox`: add-on lint; review bundled-library warnings before signing.
 

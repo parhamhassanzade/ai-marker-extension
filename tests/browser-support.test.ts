@@ -34,6 +34,7 @@ it('opens an Arc notebook window tied to the originating browser window', async 
       getManifest: () => ({}),
       getURL: (path: string) => `chrome-extension://test/${path}`,
     },
+    storage: { local: { get: async () => ({}) } },
     windows: { getAll: async () => [], create },
     action: {
       onClicked: {
@@ -53,25 +54,6 @@ it('opens an Arc notebook window tied to the originating browser window', async 
       }),
     ),
   );
-});
-it('retains native Chrome side-panel action behavior', () => {
-  const setPanelBehavior = vi.fn().mockResolvedValue(undefined);
-  vi.stubGlobal('chrome', {
-    runtime: { getManifest: () => ({ side_panel: {} }) },
-    sidePanel: { setPanelBehavior },
-  });
-  configureNotebookSurface();
-  expect(setPanelBehavior).toHaveBeenCalledWith({ openPanelOnActionClick: true });
-});
-
-it('lets Arc show the manifest popup directly without a background click listener', () => {
-  const addListener = vi.fn();
-  vi.stubGlobal('chrome', {
-    runtime: { getManifest: () => ({ action: { default_popup: 'sidepanel.html' } }) },
-    action: { onClicked: { addListener } },
-  });
-  configureNotebookSurface();
-  expect(addListener).not.toHaveBeenCalled();
 });
 it('opens a notebook tab if the browser rejects standalone extension windows', async () => {
   const { openNotebookWindow } = await import('../src/browser/notebookWindow');

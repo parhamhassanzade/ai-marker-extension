@@ -1,8 +1,8 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { DONATION_URL } from '../src/config';
-import { AboutSupport, ExportSupport, MainSupport } from '../src/notebook/Support';
+import { DONATION_URL, FEEDBACK_EMAIL, FEEDBACK_URL } from '../src/config';
+import { AboutSupport, ExportSupport, MainSupport, FeedbackLink } from '../src/notebook/Support';
 import {
   exportWithSupport,
   shouldShowSupport,
@@ -100,7 +100,7 @@ it('uses the one config URL and safe new-tab attributes on all UI links', () => 
       }),
     );
   document.body.innerHTML = html;
-  const links = [...document.querySelectorAll('a')];
+  const links = [...document.querySelectorAll<HTMLAnchorElement>(`a[href="${DONATION_URL}"]`)];
   expect(links).toHaveLength(3);
   for (const link of links) {
     expect(link.getAttribute('href')).toBe(DONATION_URL);
@@ -123,6 +123,16 @@ it('renders no export note below threshold or after dismissal', () => {
     expect(renderToStaticMarkup(createElement(ExportSupport, { state, onChange: vi.fn() }))).toBe(
       '',
     );
+});
+it('uses the configured email for feedback links and exposes the full address in About', () => {
+  document.body.innerHTML =
+    renderToStaticMarkup(createElement(FeedbackLink, { children: 'Feedback' })) +
+    renderToStaticMarkup(createElement(AboutSupport));
+  const links = [...document.querySelectorAll<HTMLAnchorElement>(`a[href="${FEEDBACK_URL}"]`)];
+  expect(links).toHaveLength(2);
+  for (const link of links) expect(link.getAttribute('aria-label')).toContain(FEEDBACK_EMAIL);
+  expect(document.querySelector('.about-support')!.textContent).toContain(FEEDBACK_EMAIL);
+  expect(document.querySelector('bdi')!.dir).toBe('ltr');
 });
 it('keeps the preference synchronized between views and unsubscribes cleanly', () => {
   let listener: (

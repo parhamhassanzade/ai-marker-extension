@@ -16,7 +16,7 @@ try {
   const worker = browser.serviceWorkers()[0] ?? (await browser.waitForEvent('serviceworker'));
   const extensionId = new URL(worker.url()).hostname;
   const behavior = await worker.evaluate(() => chrome.sidePanel.getPanelBehavior());
-  expect(behavior.openPanelOnActionClick).toBe(true);
+  expect(behavior.openPanelOnActionClick).toBe(false);
   const chat = await browser.newPage();
   chat.on('pageerror', (e) => failures.push(e.message));
   const fixture = `<!doctype html><html><head><meta charset="UTF-8"><title>Machine Learning Research - ChatGPT</title></head><body style="font:18px/1.7 system-ui;padding:100px 70px"><main><div data-message-author-role="user" data-message-id="q1">How do neural networks learn? café λ Привет 💡</div><div data-message-author-role="assistant" data-message-id="a1"><div class="markdown"><p>Neural networks learn through weight adjustment.</p><p>Gradient descent minimizes loss.</p></div><button>Copy</button></div></main></body></html>`;
