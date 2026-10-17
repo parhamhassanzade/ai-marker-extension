@@ -75,6 +75,8 @@ Annotations store the selected quote, message ID, offsets, and surrounding conte
 
 ## Privacy and known limits
 
+Read the [Privacy Policy](PRIVACY.md) for details about data access, local storage, deletion, and optional donations.
+
 - Captured text, annotations, and session state are stored in IndexedDB; small preferences are in browser local storage. The extension does not encrypt this data. Uninstalling removes it; browser-profile loss or user-cleared storage can also remove it. Restorable backup/import and notebook deletion are not implemented yet. A PDF preserves readable output, but cannot restore an editable notebook.
 - Existing `aiMarker.v1` archives migrate on first access. The legacy blob is removed only after a successful IndexedDB commit, and migrated capture starts paused.
 - Permissions are `storage`, `activeTab`, `sidePanel` (Chrome/Edge), and `scripting`, with host access restricted to the two ChatGPT hosts. No broad `tabs` or `downloads` permission is requested.
