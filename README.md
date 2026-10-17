@@ -1,294 +1,86 @@
 # AI Notebook
 
-Version **3.0.0** centers the notebook itself: **Home**, **Read**, and **Highlights**. Start with **Create notebook**, keep ideas with notes/tags/bookmarks, revisit them through source-linked chapter navigation, and save a study PDF when you are ready. Existing notebooks remain usable.
+AI Notebook **3.0.3** is a desktop browser extension that turns captured ChatGPT conversations into chaptered study notebooks with highlights, notes, tags, bookmarks, and PDF export. Everything stays local to your browser profile; there are no analytics, accounts, model calls, or cloud sync.
 
-AI Notebook is a Manifest V3 desktop browser extension for Chrome, Edge, Arc, and Firefox that turns a ChatGPT conversation into a personal study notebook. Activate Notebook Mode in the browser's side panel to collect full questions and answers into chapters. Highlight passages, add and edit notes beside them, continue chatting, and export the full notebook as a paginated PDF.
+## Build and install
 
-## Architecture plan
-
-The extension has four boundaries:
-
-1. **Platform adapters and content extraction** detect the conversation and capture its ordered messages, title, stable message IDs, and timestamps when available. Only the ChatGPT adapter is enabled.
-2. **Background worker and persistence** serialize validated notebook operations. Large notebook bodies and session metadata commit atomically in IndexedDB; Chrome Storage holds small preferences and migration metadata.
-3. **React side-panel notebook** presents full conversation chapters, anchored inline highlights, comments, and a notebook library. Capture is explicitly activated, and new chat turns update the same notebook.
-4. **PDF exporter** uses the same chapter grouping as the reader and includes all captured conversation text, highlighted notes, source metadata, and page numbers.
-
-## Setup
-
-Use Node.js **22.12+ in the 22 LTS line, or 24+**, and npm.
+Use Node.js **22.12+ in the 22 LTS line, or 24+**, and npm:
 
 ```sh
 npm ci
-npm run check
+npm run build
 ```
 
-`check` runs strict TypeScript checking, unit tests, and the production build. The installable extension is generated in **dist/**. Versions are pinned in `package.json` and `package-lock.json`.
+| Browser                                    | Load directory   | Notebook interface                         |
+| ------------------------------------------ | ---------------- | ------------------------------------------ |
+| Chrome 116+ / Edge with the side-panel API | `dist/`          | Native side panel                          |
+| Arc desktop                                | `build/arc/`     | Toolbar popup and separate notebook window |
+| Firefox desktop 140+                       | `build/firefox/` | Native sidebar                             |
 
-For browser integration tests:
+ChatGPT is the only enabled AI platform. Supported hosts are `https://chatgpt.com` and `https://chat.openai.com`. Mobile browsers are not supported.
 
-```sh
-npx playwright install chromium
-npm run test:e2e
-```
+### Chrome and Edge
 
-The smoke test loads the actual packaged extension in a temporary Chromium profile. Its side-panel React page is exercised as an extension page against an intercepted ChatGPT-shaped fixture, and it checks the browser side-panel activation configuration. It covers explicit activation, complete chapter rendering, in-notebook text selection, notes and note editing, live conversation updates, IndexedDB persistence, themes, PDF download, pause/resume, finishing, clearing, and new notebook creation. Screenshots and a sample PDF are written to the ignored `artifacts/` directory. The browser profile is deleted afterward.
+1. Open `chrome://extensions` or `edge://extensions`.
+2. Enable **Developer mode**, choose **Load unpacked**, and select `dist/`.
+3. Pin **AI Notebook**, open a ChatGPT conversation, and click the extension icon.
+4. Click **Create notebook** to capture the available conversation.
 
-Unit tests include a 12 MB archive persisted across IndexedDB connection restarts, concurrent writes, migration, commit failures, chapter ordering, anchor behavior, and long PDF pagination.
+### Arc
 
-`npm run dev` serves the reader layout at **/sidepanel.html**. Functional capture requires installation as an extension. For extension development, rebuild, reload the extension, and refresh ChatGPT. Use `npm run format:check` to check source formatting.
+1. Open `arc://extensions`, enable **Developer mode**, and load `build/arc/` unpacked.
+2. Open ChatGPT and click AI Notebook in the extensions menu.
+3. Use **Create notebook** in the popup. Choose **Keep notebook open** for a separate window connected to the originating browser window. A notebook-tab fallback is used if windows are rejected.
 
-## Install in Chrome or Edge
-
-1. Run `npm run build`.
-2. Open **chrome://extensions** in Chrome or **edge://extensions** in Edge.
-3. Enable **Developer mode**.
-4. Choose **Load unpacked** and select this project's **dist** directory.
-5. Pin **AI Notebook** in the Extensions menu.
-6. Keep your existing ChatGPT tab open; the panel reconnects and injects its content script on demand. If Chrome asks for site access after this update, allow access on the two supported ChatGPT hosts.
-7. Click the AI Notebook icon. The notebook opens in the browser side panel.
-8. Click **Activate Notebook Mode** to convert the current conversation.
-
-Use a browser with the `sidePanel` API (Chrome 116+; current Edge supports the equivalent sidebar API). Chrome/Chromium integration is tested here; native Edge and signed-in ChatGPT should be checked before release. After rebuilding, reload the extension card. The version handshake replaces an old content script when the panel reconnects; refreshing the chat page remains a troubleshooting option.
-
-## Workflow
-
-- Open an existing conversation or start a new chat at **chatgpt.com** or **chat.openai.com**.
-- Click the extension icon, then **Activate Notebook Mode**. Visiting a conversation alone does not save its content.
-- Activation scans backward through available rendered history, then restores the original chat scroll position. You can stop the scan. Hidden or collapsed content may still need to be opened manually.
-- Read complete questions and answers as **Chapter 01**, **Chapter 02**, and so on. The reader initially renders 20 chapters; **Read next 20 chapters** reveals more. All captured chapters are included in PDF export regardless of how many are currently displayed.
-- Select a passage within an assistant answer in the notebook. The toolbar offers yellow **Highlight**, green **Definition**, red **Important**, **Add Note**, and **Cancel**. Add a note, then choose any category; **Save note + highlight** uses yellow.
-- Use each annotation's comment button to edit its note, or its trash button to remove it. The highlight stays attached through quote, offset, and surrounding-text anchors.
-- Continue chatting. New questions, full assistant responses, streaming updates, and title changes are monitored automatically while Notebook Mode is active.
-- **Pause Notebook Mode** stops capture. Reactivating resumes the same unfinished notebook and captures currently available messages, including turns added while paused.
-- **Finish** ends the notebook. It remains readable and editable; later activation creates a new notebook. **New notebook for this conversation** starts a new notebook and finishes the previous active one.
-- Edit the notebook title and press Enter or the check button to save it. Use the library selector to revisit older notebooks.
-- **Export full PDF** exports the complete captured conversation, not just highlights. For the current live notebook, it refreshes capture before export.
-- **Clear highlights** asks before removing highlights and comments. Full conversation text remains.
-- The theme follows the system initially. The sun/moon button saves a device-local preference in Chrome Storage.
-
-Notebooks are scoped to conversation IDs, so unrelated chats do not get combined. A temporary chat is migrated to its assigned ChatGPT URL when matching captured turns establish continuity. Pause and finish state persist across worker restarts and page reloads for conversations with stable IDs.
-
-## Project structure
-
-```text
-manifest.json                       MV3 action, side panel, supported hosts, permissions
-sidepanel.html                      Notebook UI entry point
-scripts/build.mjs                   Vite reader, ES worker, IIFE content bundle
-src/
-  adapters/
-    ChatGPTAdapter.ts               Working AIPlatformAdapter
-    ClaudeAdapter.ts                Disabled future adapter contract
-    index.ts                        Adapter registry and snapshot creation
-  background/
-    serviceWorker.ts                Message validation, serialized writes, migration
-  content/
-    index.ts                        Opt-in capture, DOM observer, SPA lifecycle
-    chatgpt/
-      detector.ts                   ChatGPT DOM selectors
-      extractor.ts                  Role/structure fallbacks, clean text, stable IDs, debug summaries
-      history.ts                    Bounded older-history scan and scroll restoration
-    highlighter.ts                  Shared quote/context anchor utilities
-    toolbar.ts                      Isolated selection toolbar and note editor
-  notebook/
-    App.tsx                         Notebook Mode, library, themes, actions
-    connection.ts                  URL checks, version handshake, on-demand content injection
-    NotebookView.tsx                Chapter reader and notebook text selection
-    Message.tsx                     Full message and editable annotations
-    Highlight.tsx                   React-rendered inline highlights, including overlaps
-    chapters.ts                     Shared chapter grouping for reader and PDF
-    main.tsx                        React entry point
-  storage/
-    storage.ts                      Typed messaging/storage client abstraction
-    indexedDB.ts                    Per-notebook records and atomic session metadata
-    repository.ts                   Pure notebook lifecycle transitions
-    validation.ts                   Runtime request/payload validation
-    settings.ts                     Small Chrome Storage preferences
-  pdf/
-    notebookExporter.ts             Full chaptered PDF, local font, pagination
-  types/index.ts                    Message, notebook, adapter, and command types
-  styles/notebook.css               Tailwind and responsive light/dark reader styling
-public/
-  fonts/                            Bundled Noto Sans, Noto Naskh Arabic, and OFL licenses
-  icons/                            Extension icons
-```
-
-## Persistence and engineering notes
-
-The worker is the sole writer. It reads the current IndexedDB state before each queued transition; notebook records and active/paused session metadata commit together. Callers wait for transaction completion, not merely request success. Only changed notebook records are written. A failed write reports an error and keeps the previously committed archive.
-
-Existing AI Marker `aiMarker.v1` archives are migrated on first access. The old Chrome Storage blob is removed only after a successful IndexedDB commit. The schema is versioned; future data changes should introduce explicit migrations. Migrated notebooks start paused until Notebook Mode is explicitly activated. Small theme and migration settings remain in Chrome Storage.
-
-Snapshot merging retains messages removed temporarily by DOM virtualization. Newly discovered older turns are inserted before known following turns; when platform turn indices are available, those indices establish full ordering. The extractor checks explicit author attributes, turn roles, and semantic role headings. It removes buttons, hidden content, and navigation before serialization. No site HTML is injected into the notebook: content is rendered as text. Highlights are React elements, so capture never wraps or mutates the original chat answer DOM.
-
-Worker invalidation messages refresh both side-panel views and content-script activation state. Content scripts cannot directly access the trusted Chrome Storage area or extension-origin IndexedDB. Background listeners are registered synchronously. All scripts, styles, icons, and fonts are local and compatible with Manifest V3's CSP. PDF dependencies are lazy-loaded.
-
-## Privacy and practical limits
-
-- Everything stays on this device. There are no analytics, model calls, private ChatGPT API requests, authentication services, or cloud sync.
-- Permissions are **storage**, **activeTab**, **sidePanel**, and **scripting**, with host permissions limited to the two ChatGPT domains. This allows reconnection to tabs opened before installation. Content scripts run only on those two hosts. The extension does not request the broad tabs permission or a downloads permission.
-- “Full conversation” means all captured question and answer text. The history scanner can reveal DOM-backed older turns, but cannot recover messages the platform does not expose, hidden branches, collapsed content, images, canvas documents, or server-only history. Its scan is bounded to 60 scroll/capture steps and stops on navigation or cancellation. Scroll older turns into view to supplement capture.
-- Parsing depends on ChatGPT's DOM attributes. Tests use realistic fixtures, not a signed-in ChatGPT account. Platform markup changes and alternate answer layouts may require adapter updates.
-- Stable platform message IDs are preferred. Positional fallback IDs cannot guarantee identity in every virtualized or regenerated layout. Ambiguous repeated passages remain unpainted rather than moving a highlight to the wrong sentence; their saved notes remain available.
-- Text selection is confined to a single message and capped at 50,000 characters. Shift-based keyboard selection and Escape dismissal are supported. Highlighting is limited to assistant answers; annotation notes always reference their source message ID.
-- PDFs preserve plain text, code text, and line breaks. Paragraphs, headings, bullet/numbered lists, and code indentation are preserved as text. Rich Markdown styling, formulas, media, and rich tables are not reproduced visually. The bundled fonts cover Persian/Arabic, Latin, Greek, and Cyrillic; unsupported glyphs, including most CJK and emoji, are printed as `[U+CODEPOINT]` tokens instead of silently disappearing.
-- IndexedDB avoids Chrome Storage's local 10 MB body limit, but remains subject to browser disk quota and memory/messaging limits. Storage is not encrypted by the extension and is removed on uninstall. Backup/import and archive deletion are future work.
-- Temporary chats without a stable conversation URL use an in-page UUID. Refreshing such a page can start a different notebook identity; normal `/c/...` conversations persist across reloads.
-
-## Future adapters and services
-
-Implement **AIPlatformAdapter** with `detectConversation()`, `extractMessages()`, `extractTitle()`, and `getConversationId()`. Register it in `src/adapters/index.ts`, add extraction fixtures and browser tests, then enable the platform's host patterns and validation URL allowlist. Claude's disabled adapter illustrates the contract; Gemini and Perplexity use the same boundary. None is advertised as working in this MVP.
-
-Cloud sync and accounts should sit behind the persistence boundary, preserve UUIDs, define conflict resolution and deletion, and be explicitly opt-in. A summary provider should consume notebook snapshots through a separate service; credentials and network calls belong outside content scripts. No inactive account or summary code is executed today.
-
-## Live release checks
-
-1. Install in Chrome and Edge; verify clicking the icon opens the native side panel.
-2. On both supported ChatGPT hosts, activate an existing long conversation and a new chat. Verify title, chronological chapters, full messages, history scanning, cancellation, and scroll restoration.
-3. Highlight passages in questions, paragraphs, lists, and code. Add/edit notes, test each category, overlapping highlights, keyboard selection, and Escape.
-4. Continue chatting, stream and regenerate answers, navigate between conversations, and verify that only activated conversations update their notebooks.
-5. Pause, resume, finish, reload, and reopen the browser. Verify session state and archive preservation.
-6. Export multiple-page conversations; check chapter numbers, complete answers, comments, glyph fallbacks, and page numbering.
-7. Verify legacy migration, transaction failure handling, both themes, unsupported tabs, and large archives.
-
-References: [Chrome sidePanel API](https://developer.chrome.com/docs/extensions/reference/api/sidePanel), [Microsoft Edge sidebar](https://learn.microsoft.com/en-us/microsoft-edge/extensions/developer-guide/sidebar), [Chrome content scripts](https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts), [jsPDF](https://github.com/parallax/jsPDF).
-
-## Metadata-only PDF fix (2.0.1)
-
-The exporter already iterated `Notebook.messages`. The reproducible failure was upstream: a conversation using semantic turn/heading markers but lacking `data-message-author-role` produced **zero extracted messages** with the old selector. The old PDF generator accepted an empty notebook and still wrote its metadata cover. Tabs predating installation also lacked a reliable content-script recovery path.
-
-The existing architecture is preserved. The corrected flow is:
-
-```text
-Current active tab → validate ChatGPT URL → ping/version-check content script
-→ inject/reconnect when needed → fresh structured conversation extraction
-→ import existing messages → IndexedDB notebook → live message updates
-→ export every stored message → attach highlights/notes under the source answer
-```
-
-Activation waits briefly for loaded messages in an existing `/c/...` conversation and shows an error if none are found. Blank new chats can still enter Notebook Mode and wait for their first message. Empty notebooks cannot be exported: both the button and PDF generator guard against a metadata-only output.
-
-Each notebook retains its `messages` and `highlights` arrays. Messages have stable IDs, roles, full clean text, optional platform order, and optional timestamps; the array preserves conversation order. Each highlight references `messageId` and stores its quote, offset/context anchor, color, note, and creation time. Highlight removal never removes the surrounding answer. Full messages are rendered and exported even when `highlights` is empty.
-
-Development extraction diagnostics print the title, message count, each role, and a 100-character preview. Production builds do not log conversation previews. The unit regression prints legacy selector count **0** and verifies new extraction count **4** on `tests/fixtures/chatgpt-semantic.html`.
-
-Run the exact PDF acceptance test:
-
-```sh
-npm ci
-npm run check
-npx playwright install chromium
-npm run test:acceptance
-npm run test:e2e
-```
-
-`test:acceptance` downloads and parses two real PDFs with PDF.js: one with no highlights and one with the requested highlight and note. It asserts the full text of all four messages in their original order in both PDFs, excludes copied UI controls, and checks annotation placement. It also simulates a disconnected pre-installation tab and verifies reconnection. Evidence is saved as `artifacts/acceptance-results.json`, `artifacts/acceptance-no-highlights.pdf`, and `artifacts/acceptance-annotated.pdf`.
-
-To test the installed build in Chrome:
-
-1. Build the project with `npm run build`.
-2. Open `chrome://extensions`, enable Developer mode, and load `dist` (or reload the existing AI Notebook card). Check that its version is **3.0.0**.
-3. Open an existing ChatGPT conversation with these four messages: “What is machine learning?”, a complete answer, “What is supervised learning?”, and a complete answer containing “uses labeled data”.
-4. Click the extension icon and **Activate Notebook Mode**. Confirm **4 messages imported** and that both full question/answer chapters appear. No manual copying or adding messages is needed.
-5. Export before highlighting and confirm the full conversation is in the PDF.
-6. Select “uses labeled data” inside the second assistant answer, add “Important definition”, and save a highlight.
-7. Export again and confirm both complete answers and both questions remain, with the highlight and note under the second answer.
-8. Continue chatting; verify new turns update the same notebook without duplicate streaming messages. Reload the notebook panel and confirm annotations remain attached.
-
-The automated acceptance test uses a realistic DOM fixture; a signed-in live ChatGPT check is still required because site markup can change independently.
-
-## Live ChatGPT capture fix (2.0.2)
-
-A signed-in Chrome inspection identified two issues that the earlier fixture did not cover: ChatGPT retained an old conversation in a hidden first `main`, and the visible conversation used `data-chatgpt-search-unit-key` / `data-content-search-unit-key` markers instead of legacy role attributes or article elements. The extractor now chooses a visible conversation root, reads user/assistant roles from those unit keys, deduplicates nested markers, and uses `data-chatgpt-search-message-ids` for stable identity when available.
-
-The regression fixture `tests/fixtures/chatgpt-live-layout.html` reproduces the hidden old root and observed message-marker layout. Version 2.0.2 was reloaded in the existing native Chrome installation and verified on the open conversation: four messages, two chapters, both complete answers, and a downloaded PDF containing both prompts and answers in order with zero highlights. No chat messages were sent or changed during verification.
-
-## Sentence highlighter and PDF colors (2.1.0)
-
-The notebook now includes a visible **Sentence highlighter** bar. Choose **Yellow**, **Green**, or **Red**, then drag across a sentence in an assistant answer. The selection is saved and colored immediately. **Select text** switches back to the floating toolbar, where you can add a note before saving; existing annotations also have an Edit note button.
-
-PDF exports now paint the same colored background directly behind highlighted words in the full original answer, as well as the quoted passage in Highlighted Notes. Highlight anchors and overlap precedence are shared with the notebook reader. The exporter carries colors through line wrapping, explicit paragraph breaks, page breaks, code indentation, and unsupported-glyph substitutions, then draws each full line as selectable PDF text. All unselected conversation text remains present.
-
-The acceptance test also exercises a real mouse drag with the yellow highlighter, saves green/red annotations, and downloads `artifacts/acceptance-colored-highlights.pdf`. The color backgrounds were visually inspected and checked against the text locations in that PDF. Layout tests cover long wrapped highlights, overlapping colors, code indentation, glyph substitutions, and colored rectangles across multiple pages.
-
-## Highlight on the original ChatGPT page (2.2.0)
-
-Select a sentence directly in the main ChatGPT conversation. The floating toolbar offers **Highlight** (yellow), **Definition** (green), **Important** (red), **Add Note**, and **Cancel**. The side panel can stay closed. Your first saved highlight creates a notebook if needed; visiting a chat alone does not save it. Existing paused or finished notebooks accept annotations without restarting automatic capture.
-
-Highlights appear on the original page, survive reloads, and appear in the notebook and full PDF using the same colors. Remove a highlight or clear highlights from the notebook to remove its page color. Selections can span formatting and paragraphs within one message; select each message separately.
-
-After upgrading, rebuild with `npm run build`, reload AI Notebook in `chrome://extensions`, then reload the ChatGPT tab. The installed extension should show **3.0.0**. Run `npm run test:source` to check real mouse selection on the original page, notes, notebook persistence, reload restoration, PDF export, and clearing.
-
-Source colors use the CSS Custom Highlight API so ChatGPT's React-owned nodes remain intact. Conversation-local source saves are validated in the background worker and committed atomically with the corresponding message and annotation.
-
-### Upgrade mismatch fix (2.2.1)
-
-If the main-page toolbar reports `Invalid notebook request.`, Chrome may still be running an older background worker even though the page loaded the rebuilt content script. Version 2.2.1 checks worker support before saving and gives explicit reload instructions. Reload **AI Notebook itself** in `chrome://extensions`, then reload the ChatGPT tab. Rebuilding or refreshing only the webpage does not update the worker.
-
-### Saved conversation navigation fix (2.2.2)
-
-ChatGPT navigates between saved conversations without replacing the browser document. The sender metadata can retain the original document URL. Main-page highlighting now validates the sender origin and the tab's current URL rather than comparing against the original route. This supports older chats, project chats, and new chats that acquire saved conversation URLs, while rejecting selections saved after the tab moves to a different conversation. The browser source-highlight test covers navigating to an existing project conversation without a page reload.
-
-## Persian PDF export (2.3.0)
-
-Export full PDF now supports Persian titles, questions, answers, highlights, and notes. Persian paragraphs align to the right, letters use joined forms, and mixed English terms and Persian/Latin numbers retain their proper visual order. Half-spaces influence letter joining. Highlights follow the shaped text through wrapping and page breaks, including selections over ligatures. English paragraphs retain left alignment.
-
-The extension bundles Noto Naskh Arabic alongside Noto Sans; font files load locally, so export works offline. Noto Naskh Arabic comes from the [official Noto repository](https://github.com/notofonts/noto-fonts/tree/main/hinted/ttf/NotoNaskhArabic) under the bundled `NotoNaskhArabic-OFL.txt` license. No notebook content is uploaded. PDF copy/search behavior for joined Arabic glyphs can vary by reader.
-
-Reload AI Notebook in `chrome://extensions`, confirm **2.3.0**, and reload ChatGPT before exporting. Run `npm run test:persian` for the browser download test with Persian text, all three highlight colors, mixed English terms, Persian numbers, multiple pages, and a Persian filename.
-
-## Arc and Firefox (2.4.0)
-
-`npm run build` produces these independent distributions:
-
-| Browser              | Load directory  | Notebook interface                                                    |
-| -------------------- | --------------- | --------------------------------------------------------------------- |
-| Chrome / Edge        | `dist`          | Native side panel                                                     |
-| Arc                  | `build/arc`     | Persistent notebook window attached to the originating browser window |
-| Firefox desktop 140+ | `build/firefox` | Native Firefox sidebar                                                |
-
-### Arc installation
-
-1. Open `arc://extensions`.
-2. Enable Developer mode, choose **Load unpacked**, and select `build/arc` in this project.
-3. Reload your ChatGPT tab. Click **AI Notebook** in Arc's extensions to open the notebook popup. You can also highlight on the ChatGPT page while the notebook window is closed.
-4. Click **Keep notebook open** to open a separate notebook window alongside your chat. Switching chats within the originating browser window updates its notebook context. The Keep notebook open button reuses the notebook window. If Arc rejects extension windows, it opens a notebook tab connected to the original chat.
-
-Arc uses its dedicated build so its action does not depend on Chrome's side-panel API. See [Arc's extension controls](https://resources.arc.net/hc/en-us/articles/19434259167767-Extensions-in-Arc-How-to-Import-Add-Open).
-
-### Firefox installation
+### Firefox
 
 1. Open `about:debugging#/runtime/this-firefox`.
-2. Click **Load Temporary Add-on**, then select `build/firefox/manifest.json`.
-3. Reload ChatGPT. Click the AI Notebook toolbar button to open Firefox's native sidebar; grant access to ChatGPT if Firefox asks.
-4. Highlights, local notebook storage, notes, old conversations, and English/Persian PDF export use the same implementation.
+2. Choose **Load Temporary Add-on** and select `build/firefox/manifest.json`.
+3. Open ChatGPT and click AI Notebook to open its sidebar. Grant ChatGPT access if asked.
 
-Temporary add-ons are removed when Firefox restarts. A permanent release installation requires Mozilla signing; the generated XPI is currently unsigned. Use the [temporary installation guide](https://extensionworkshop.com/documentation/develop/temporary-installation-in-firefox/) and [Mozilla signing guide](https://extensionworkshop.com/documentation/publish/signing-and-distribution-overview/). Firefox 140+ is required because page highlighting uses the [CSS Custom Highlight API added in Firefox 140](https://developer.mozilla.org/en-US/docs/Mozilla/Firefox/Releases/140). Mobile browsers are not a supported target.
+Temporary add-ons are removed when Firefox restarts. The generated XPI is unsigned; permanent distribution requires signing. Reinstalling a temporary add-on may not preserve its data, so avoid relying on it for your only copy of important notes.
 
-### Packages and verification
+### Updating and packaging
 
-`npm run package` builds and creates `packages/ai-notebook-chrome-3.0.0.zip`, `packages/ai-notebook-arc-3.0.0.zip`, and `packages/ai-notebook-firefox-3.0.0.xpi`. Archives have their manifest at the root, include both bundled fonts/licenses, and omit source maps.
+After a rebuild, reload the extension in its extension manager and confirm **3.0.3**. The notebook reconnects to existing tabs and replaces outdated content scripts when possible. Refresh ChatGPT if needed; rebuilding files alone does not reload an installed worker.
 
-- `npm run test:arc`: loads the Arc distribution in isolated Chromium, verifies the separate notebook window stays connected to its source window, and captures old/project chats after client-side navigation. This verifies the Arc build's Chromium behavior; it is not a native Arc UI test.
-- `npm run test:firefox`: temporarily installs the actual Firefox build in an isolated, headless Firefox profile. Checks real Firefox background messaging, main-page highlights, restoration after reload, full notebook messages, and PDF download. It uses a local HTTPS ChatGPT fixture and does not alter your normal browser profile. Defaults to `/Applications/Firefox.app/Contents/MacOS/firefox`; override `FIREFOX_BINARY` on other platforms. Requires OpenSSL and downloads pinned geckodriver 0.37.1 on first run.
-- `npm run lint:firefox`: runs Mozilla's add-on linter. The current build has zero errors; warnings concern bundled third-party React/PDF/HTML-library patterns and need review when submitting for signing.
+`npm run package` creates versioned Chrome/Arc ZIPs and a Firefox XPI in `packages/`. Use each browser's own build directory.
 
-The browser API boundary uses Firefox's native Promise-based `browser` APIs and Chromium's `chrome` APIs. Extension origins are obtained with `runtime.getURL`, supporting Firefox's `moz-extension` scheme. Background listeners and IndexedDB's serialized writer are shared; Firefox uses an MV3 event background rather than a Chromium service worker. Archives stay local to the browser/profile where they were saved; cross-browser sync is not implemented.
+## Use your notebook
 
-### Arc toolbar launch fix (2.4.1)
+1. Open a saved conversation or start a new ChatGPT chat. Visiting alone does not create a notebook.
+2. Click **Create notebook**. Capture scans backward through available rendered history and restores your scroll position. **Stop history scan** cancels scanning; hidden or collapsed content may need to be opened manually.
+3. Browse **Home**, **Read**, and **Highlights**:
+   - **Home:** edit your personal overview, explore topics and chapters, or jump from a saved insight to its source. Topics use local keywords/tags; insights come from highlights, with bookmarks prioritized. There is no generated AI summary.
+   - **Read:** read captured questions and answers as chapters. The first 20 chapters render initially; **Read next 20 chapters** reveals more. Source jumps load later chapters as needed.
+   - **Highlights:** search the current notebook's selected text, notes, and tags; filter by tag or bookmark; edit notes/tags and return to the source passage.
+4. Keep chatting while updates are active. New turns and streamed text update the same notebook.
+5. **Pause updates** stops automatic capture. **Resume updates** captures available turns added while paused. **Finish** keeps the notebook readable/editable and makes later activation start another notebook. **New notebook for this conversation** finishes the active one and starts another.
+6. Rename the notebook by editing its title and saving with Enter or the check button. Use the notebook selector to revisit older notebooks.
+7. **Save study PDF** exports all captured chapters, including those not yet displayed, along with overview, highlights, notes, tags, bookmarks, contents links, and page numbers. The active conversation is refreshed first. Empty notebooks cannot be exported.
+8. Remove individual highlights or use **Clear highlights** and confirm. Full conversation text remains. The theme button saves a local light/dark preference.
 
-The Arc manifest now declares `action.default_popup` so clicking AI Notebook immediately opens the notebook through the browser's native extension-popup mechanism. The initial UI no longer depends on a background action-click handler creating a window. Keep notebook open creates or reuses a separate notebook window, with a notebook-tab fallback if extension windows are rejected. Both preserve the source chat context; the fallback tab does not attempt to capture its own extension page.
+### Highlight selection scope
 
-Reload the extension loaded from `build/arc` in Arc's extension manager and confirm **2.4.1**, then reload the ChatGPT tab. The Arc regression now actually calls `action.openPopup`, inspects the rendered toolbar popup, clicks Keep notebook open, and verifies notebook activation and old/project navigation. It runs in isolated Chromium; native Arc UI behavior still requires verification in Arc.
+The two selection surfaces have different rules, matching the implementation:
 
-## A personal knowledge notebook (3.0.0)
+- **Original ChatGPT page:** select text within one detected **user question or assistant answer**. The floating toolbar works with the notebook closed. The first save can create a notebook. Adding annotations to a paused/finished notebook does not restart automatic capture.
+- **Notebook reader:** select text within one **assistant answer**. User questions cannot be highlighted here. Choose a persistent yellow/green/red color for immediate saving, or **Select text** for the floating toolbar and a note.
 
-- **Home:** your title, optional personal overview, topics, key insights drawn from saved highlights, and a chapter list. Bookmarked ideas are prioritized. Topic chips combine source keywords and your highlight tags; no AI summary is generated. Paste a summary from your AI conversation or write your own in Your overview.
-- **Read:** quiet question/response cards, inline colored highlights, and notes in the margins. Browse chapters or jump directly from an insight to its source. A jump beyond the first 20 chapters loads the relevant chapter automatically. Persian text uses automatic text direction in cards and notes.
-- **Highlights:** one searchable collection across the notebook. Find text, notes, or tags; filter by bookmark or tag; return to the original passage. Edit a note and comma-separated tags together, bookmark an idea, or remove a highlight.
-- **Save study PDF:** a secondary action after the notebook. The export has a title-led cover, clickable contents with accurate page numbers, an overview/topics section, question-titled chapters with complete questions and responses, and a saved-highlight collection with personal notes, tags, and bookmarks. Your pasted summary is included when present. English and Persian rendering remains supported.
+The toolbar offers yellow **Highlight**, green **Definition**, red **Important**, **Add Note**, and **Cancel**. **Save note + highlight** uses yellow. Selection can cross formatting and paragraphs inside one message, but cannot cross messages and is capped at 50,000 characters. Shift-based keyboard selection and Escape dismissal are supported.
 
-Highlight metadata and personal overviews commit through the existing serialized background writer. They are optional fields, so existing IndexedDB notebooks require no destructive migration. Manual overviews are preserved when new replies arrive. No AI provider, model download, account, network permission, or cloud transmission was added.
+Annotations store the selected quote, message ID, offsets, and surrounding context. Colors restore on the source page after reload and appear in the notebook and PDF.
 
-Run `npm run test:ux` to verify the complete knowledge-notebook flow, annotation/search/bookmark/tag persistence, manual overview persistence, late chapter navigation, and the study PDF. Screenshots are saved as `artifacts/knowledge-home.png`, `artifacts/knowledge-home-dark.png`, and `artifacts/knowledge-highlights.png`; a study PDF preview is saved as `output/pdf/study-notebook.pdf`.
+## Privacy and known limits
 
-Reload the current browser build and confirm **3.0.0**: Chrome/Edge `dist`, Arc `build/arc`, Firefox `build/firefox`. Then reload your ChatGPT tab.
+- Captured text, annotations, and session state are stored in IndexedDB; small preferences are in browser local storage. The extension does not encrypt this data. Uninstalling removes it; browser-profile loss or user-cleared storage can also remove it. Restorable backup/import and notebook deletion are not implemented yet. A PDF preserves readable output, but cannot restore an editable notebook.
+- Existing `aiMarker.v1` archives migrate on first access. The legacy blob is removed only after a successful IndexedDB commit, and migrated capture starts paused.
+- Permissions are `storage`, `activeTab`, `sidePanel` (Chrome/Edge), and `scripting`, with host access restricted to the two ChatGPT hosts. No broad `tabs` or `downloads` permission is requested.
+- “Full conversation” means **captured text**, not guaranteed server history. The scan is bounded to 60 steps; hidden branches, unexposed history, collapsed content, images, canvas documents, and other media cannot be recovered automatically. A stable scroll position is not proof of complete history.
+- Extraction depends on ChatGPT's changing page structure. Automated browser tests use realistic fixtures, not signed-in ChatGPT. Native Edge/Arc UI, signed-in ChatGPT, and Firefox releases need manual release checks. The Arc script tests its build in Chromium, not native Arc.
+- Stable platform IDs are preferred. Positional IDs, regenerated answers, branches, and virtualized layouts have identity limitations. Ambiguous highlights can remain unpainted; saved notes are retained.
+- Temporary chats use an in-page UUID until matching turns establish a stable URL. Reloading an unsaved temporary chat can create a different notebook identity. Normal saved conversations preserve lifecycle state across reloads.
+- PDFs preserve text, code indentation, and line breaks. Rich Markdown appearance, formulas, media, and rich tables are not reproduced visually. Bundled fonts support Persian/Arabic, Latin, Greek, and Cyrillic; unsupported characters, including most CJK and emoji, become `[U+CODEPOINT]` tokens. Copy/search of joined Arabic glyphs varies by PDF reader.
+- IndexedDB remains subject to browser storage quota and memory/messaging limits. Archives are local to each browser/profile, with no cross-browser synchronization.
+
+For development commands and release checks, see [Development](docs/development.md). Historical version notes are in [CHANGELOG.md](CHANGELOG.md); earlier capture/export analysis is in [FIX_NOTES.md](FIX_NOTES.md). [LICENSE](LICENSE) currently uses MIT as an owner-reviewable placeholder; bundled fonts retain their separate licenses.
