@@ -350,5 +350,5 @@ export async function exportNotebookPdf(notebook: Notebook) {
       .replace(/[^\p{L}\p{N} _-]/gu, '')
       .trim()
       .slice(0, 80) || 'AI Notebook';
-  pdf.save(`${safeTitle}.pdf`);
+  await pdf.save(`${safeTitle}.pdf`, { returnPromise: true });
 }

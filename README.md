@@ -85,3 +85,7 @@ Annotations store the selected quote, message ID, offsets, and surrounding conte
 - Once the extension page has a saved notebook, it requests persistent storage to reduce automatic eviction risk. This also covers older notebooks and notebooks first created by a source-page highlight when you next open the notebook. The browser can deny the request or lack support; capture and saving still work. The request is attempted once per notebook-page session. Persistence does not protect against uninstall, user-cleared data, or profile loss, and is not a backup. The extension does not request `unlimitedStorage`.
 
 For development commands and release checks, see [Development](docs/development.md). Historical version notes are in [CHANGELOG.md](CHANGELOG.md); earlier capture/export analysis is in [FIX_NOTES.md](FIX_NOTES.md). [LICENSE](LICENSE) currently uses MIT as an owner-reviewable placeholder; bundled fonts retain their separate licenses.
+
+## Support
+
+AI Notebook is free and works entirely on your device. If it's useful to you, you can support its development on [Ko-fi](https://ko-fi.com/parham3752). Thank you!

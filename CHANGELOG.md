@@ -2,6 +2,7 @@
 
 ## Unreleased — hardening
 
+- Added an optional Ko-fi link in About and a dismissible inline thank-you after the third successful PDF export. The counter and permanent dismissal stay local; there are no new permissions, analytics, background network requests, pop-ups, or feature restrictions. The Ko-fi page opens only when its link is clicked.
 - Fixed manifest formatting.
 - Added CI for pushes and pull requests: install, typecheck, unit tests, build, formatting, and headless Chromium smoke.
 - Added an MIT license as a placeholder for the project owner to review. Bundled fonts retain their own licenses.

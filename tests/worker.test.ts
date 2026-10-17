@@ -2,6 +2,7 @@ import { beforeEach, afterEach, it, expect, vi } from 'vitest';
 import { IDBFactory } from 'fake-indexeddb';
 import { readFileSync } from 'node:fs';
 import type { Command, Result, ConversationSnapshot, Highlight, Database } from '../src/types';
+import { SUPPORT_STORAGE_KEY, type SupportResult } from '../src/storage/support';
 let listener: (
   command: unknown,
   sender: chrome.runtime.MessageSender,
@@ -241,4 +242,66 @@ it('keeps a pre-rich legacy archive available when its migration transaction fai
   expect(local['aiMarker.v1']).toEqual(original);
   expect((await send({ type: 'list' })).ok).toBe(true);
   expect((await database.readDatabase())!.notebooks).toEqual(original.notebooks);
+});
+
+const supportRequest = async (command: unknown) =>
+  (await send(command)) as unknown as SupportResult;
+it('counts successful export notifications in order and permanently retains dismissal', async () => {
+  const created = await send({ type: 'activate', snapshot });
+  if (!created.ok) throw new Error(created.error);
+  const notebookId = created.data.notebooks[0]!.id;
+  expect(await supportRequest({ type: 'getSupportState' })).toEqual({
+    ok: true,
+    data: { successfulPdfExports: 0, dismissed: false },
+  });
+  const counts = await Promise.all(
+    Array.from({ length: 3 }, () => supportRequest({ type: 'recordPdfExport', notebookId })),
+  );
+  expect(counts.map((r) => (r.ok ? r.data.successfulPdfExports : -1))).toEqual([1, 2, 3]);
+  await Promise.all([
+    supportRequest({ type: 'dismissSupport' }),
+    supportRequest({ type: 'recordPdfExport', notebookId }),
+  ]);
+  expect(local[SUPPORT_STORAGE_KEY]).toEqual({ successfulPdfExports: 4, dismissed: true });
+  // Reload the worker module, retaining both browser stores, as on an update.
+  await database.closeDatabase();
+  vi.resetModules();
+  database = await import('../src/storage/indexedDB');
+  await import('../src/background/serviceWorker');
+  expect(await supportRequest({ type: 'getSupportState' })).toEqual({
+    ok: true,
+    data: { successfulPdfExports: 4, dismissed: true },
+  });
+  await supportRequest({ type: 'recordPdfExport', notebookId });
+  expect(local[SUPPORT_STORAGE_KEY]).toEqual({ successfulPdfExports: 5, dismissed: true });
+});
+it('never counts empty/missing notebooks or malformed export notifications', async () => {
+  const created = await send({ type: 'activate', snapshot: { ...snapshot, messages: [] } });
+  if (!created.ok) throw new Error(created.error);
+  for (const notebookId of [created.data.notebooks[0]!.id, 'missing'])
+    expect((await supportRequest({ type: 'recordPdfExport', notebookId })).ok).toBe(false);
+  expect((await supportRequest({ type: 'recordPdfExport', notebookId: '' })).ok).toBe(false);
+  expect(local[SUPPORT_STORAGE_KEY]).toBeUndefined();
+});
+it('does not lose preferences or poison the command queue when local storage fails', async () => {
+  local[SUPPORT_STORAGE_KEY] = { successfulPdfExports: 3, dismissed: false };
+  const original = structuredClone(local[SUPPORT_STORAGE_KEY]);
+  const originalSet = chrome.storage.local.set;
+  vi.spyOn(chrome.storage.local, 'set').mockRejectedValueOnce(new Error('Storage full'));
+  expect((await supportRequest({ type: 'dismissSupport' })).ok).toBe(false);
+  expect(local[SUPPORT_STORAGE_KEY]).toEqual(original);
+  chrome.storage.local.set = originalSet;
+  expect((await supportRequest({ type: 'dismissSupport' })).ok).toBe(true);
+  expect(local[SUPPORT_STORAGE_KEY]).toEqual({ successfulPdfExports: 3, dismissed: true });
+});
+it('rejects support commands from content scripts even with the extension sender ID', async () => {
+  const result = await new Promise<unknown>((resolve) =>
+    listener(
+      { type: 'dismissSupport' },
+      { id: 'test-extension', url: 'https://chatgpt.com/c/c', tab: { id: 12 } as chrome.tabs.Tab },
+      resolve,
+    ),
+  );
+  expect(result).toMatchObject({ ok: false });
+  expect(local[SUPPORT_STORAGE_KEY]).toBeUndefined();
 });

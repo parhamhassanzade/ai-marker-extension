@@ -27,6 +27,59 @@
   --soft: #333f29;
   color-scheme: dark;
 }
+.about-support {
+  margin-block: 12px 4px;
+  color: inherit;
+  font-size: 12px;
+  text-align: start;
+}
+.about-support summary {
+  cursor: pointer;
+  width: fit-content;
+}
+.about-support summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.about-support-content {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-block-start: 10px;
+}
+.about-support-content p {
+  flex: 1 1 230px;
+  margin: 0;
+}
+.about-support a,
+.export-support a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+}
+.export-result {
+  font-size: 12px;
+  text-align: start;
+  margin-block: 12px;
+}
+.export-result > p {
+  color: var(--accent);
+}
+.export-support {
+  color: inherit;
+  background: var(--soft);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.export-support p {
+  margin-block: 0 6px;
+}
+.export-support .text-button {
+  font-size: inherit;
+}
 * {
   box-sizing: border-box;
 }

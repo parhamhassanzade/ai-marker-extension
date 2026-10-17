@@ -28,6 +28,13 @@ import {
   ensureContentScript,
 } from './connection';
 import { NotebookView } from './NotebookView';
+import { AboutSupport, ExportSupport } from './Support';
+import {
+  support,
+  exportWithSupport,
+  mergeSupportState,
+  type SupportState,
+} from '../storage/support';
 export default function App() {
   const isToolbarPopup =
     isExtensionContext() &&
@@ -44,6 +51,11 @@ export default function App() {
   const [clear, setClear] = useState(false);
   const [captureNotice, setCaptureNotice] = useState('');
   const [scanning, setScanning] = useState(false);
+  const [supportPreference, setSupportPreference] = useState<SupportState>();
+  const [exportResult, setExportResult] = useState('');
+  const updateSupportPreference = useCallback((state: SupportState) => {
+    setSupportPreference((previous) => mergeSupportState(previous, state));
+  }, []);
   const [dark, setDark] = useState(() => matchMedia('(prefers-color-scheme: dark)').matches);
   const tabId = useRef<number | undefined>(undefined);
   const contextRequest = useRef(0);
@@ -136,6 +148,22 @@ export default function App() {
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark);
   }, [dark]);
+  useEffect(() => {
+    if (!isExtensionContext()) return;
+    let active = true;
+    const update = (state: SupportState) => {
+      if (active) updateSupportPreference(state);
+    };
+    void support
+      .get()
+      .then(update)
+      .catch(() => undefined);
+    const unsubscribe = support.subscribe(update);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [updateSupportPreference]);
   const notebookCount = db?.notebooks.length ?? 0;
   useEffect(() => {
     if (isExtensionContext()) void requestNotebookPersistence(notebookCount);
@@ -150,6 +178,7 @@ export default function App() {
   useEffect(() => {
     setTitle(notebook?.title ?? '');
     setClear(false);
+    setExportResult('');
   }, [notebook?.id, notebook?.title]);
   async function act(fn: () => Promise<Database | void>) {
     setBusy(true);
@@ -427,6 +456,7 @@ export default function App() {
                   className="secondary-button save-pdf-button"
                   disabled={busy || !notebook.messages.length}
                   onClick={() => {
+                    setExportResult('');
                     void act(async () => {
                       if (collecting && tabId.current && currentId === notebook.id)
                         await refreshCurrentConversation();
@@ -435,7 +465,12 @@ export default function App() {
                       );
                       if (!latest) throw new Error('Notebook no longer exists.');
                       const { exportNotebookPdf } = await import('../pdf/notebookExporter');
-                      await exportNotebookPdf(latest);
+                      await exportWithSupport(
+                        () => exportNotebookPdf(latest),
+                        () => support.recordExport(latest.id),
+                        updateSupportPreference,
+                      );
+                      setExportResult('Study PDF exported.');
                     });
                   }}
                 >
@@ -465,6 +500,14 @@ export default function App() {
                   <Trash2 size={15} />
                 </button>
               </div>
+              {exportResult && (
+                <div className="export-result">
+                  <p role="status">{exportResult}</p>
+                  {supportPreference && (
+                    <ExportSupport state={supportPreference} onChange={updateSupportPreference} />
+                  )}
+                </div>
+              )}
               {clear && (
                 <div className="confirm" role="alert">
                   <p>Remove this notebook’s highlights and notes? The full conversation stays.</p>
@@ -521,6 +564,7 @@ export default function App() {
             New notebook for this conversation
           </button>
           <footer>Stored on this device · Yours to keep</footer>
+          <AboutSupport />
         </>
       )}
     </main>

@@ -6,6 +6,13 @@ import { STORAGE_KEY } from '../storage/storage';
 import { emptyDatabase, transition } from '../storage/repository';
 import { readDatabase, writeDatabase } from '../storage/indexedDB';
 import type { Command, Database, Result } from '../types';
+import {
+  isSupportCommand,
+  SUPPORT_STORAGE_KEY,
+  supportState,
+  type SupportCommand,
+  type SupportResult,
+} from '../storage/support';
 let queue: Promise<unknown> = Promise.resolve();
 async function loadDatabase(): Promise<Database> {
   const existing = await readDatabase();
@@ -62,8 +69,48 @@ async function execute(command: Command): Promise<Result> {
     };
   }
 }
+async function executeSupport(command: SupportCommand): Promise<SupportResult> {
+  try {
+    const saved = (await extension.storage.local.get(SUPPORT_STORAGE_KEY))[SUPPORT_STORAGE_KEY];
+    const state = supportState(saved);
+    if (command.type === 'recordPdfExport') {
+      const db = await loadDatabase();
+      const notebook = db.notebooks.find((n) => n.id === command.notebookId);
+      if (!notebook?.messages.some((m) => m.text.trim()))
+        throw new Error('Empty or missing notebooks do not count as PDF exports.');
+      state.successfulPdfExports = Math.min(
+        Number.MAX_SAFE_INTEGER,
+        state.successfulPdfExports + 1,
+      );
+    }
+    if (command.type === 'dismissSupport') state.dismissed = true;
+    if (command.type !== 'getSupportState')
+      await extension.storage.local.set({ [SUPPORT_STORAGE_KEY]: state });
+    return { ok: true, data: state };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'Could not save the support preference.',
+    };
+  }
+}
 extension.runtime.onMessage.addListener((command: unknown, sender, respond) => {
   if (sender.id !== extension.runtime.id) return false;
+  if (isSupportCommand(command)) {
+    // Only extension pages may record exports or dismiss the note. Content
+    // scripts must not be able to increment this counter or change preferences.
+    if (!sender.url?.startsWith(extension.runtime.getURL('/'))) {
+      respond({
+        ok: false,
+        error: 'Support preferences are available in the notebook.',
+      } satisfies SupportResult);
+      return false;
+    }
+    const task = queue.then(() => executeSupport(command));
+    queue = task.catch(() => undefined);
+    void task.then(respond);
+    return true;
+  }
   if (
     typeof command === 'object' &&
     command &&

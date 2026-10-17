@@ -101,6 +101,11 @@ try {
     'const done=arguments[arguments.length-1];browser.tabs.query({}).then(tabs=>done(tabs.find(t=>t.url?.includes("/c/firefox-old")).windowId));',
   );
   await driver.get(`${viewUrl}?sourceWindow=${sourceWindow}`);
+  const readButton = await driver.wait(
+    async () => (await driver.findElements(By.xpath('//button[normalize-space()="Read"]')))[0],
+    10000,
+  );
+  await readButton.click();
   await driver.wait(
     async () => (await driver.findElements(By.css('[data-notebook-message-id]'))).length === 4,
     10000,
@@ -110,6 +115,11 @@ try {
   );
   assert.equal(archive.ok, true);
   assert.equal(archive.data.notebooks[0].highlights[0].text, 'Machine learning');
+  await (await driver.findElement(By.css('.about-support summary'))).click();
+  const supportLink = await driver.findElement(By.css('.about-support a'));
+  assert.equal(await supportLink.getAttribute('href'), 'https://ko-fi.com/parham3752');
+  assert.equal(await supportLink.getAttribute('target'), '_blank');
+  assert.equal(await supportLink.getAttribute('rel'), 'noopener noreferrer');
   const annotated = await driver.executeAsyncScript(`
     const done=arguments[arguments.length-1];
     browser.runtime.sendMessage({type:'list'}).then(async result=>{
@@ -136,6 +146,15 @@ try {
   assert.match(pdf.text, /Supervised learning/);
   assert.match(pdf.text, /A Firefox research note/);
   assert.match(pdf.text, /#research/);
+  await driver.wait(
+    async () =>
+      (
+        await driver.executeAsyncScript(
+          'const done=arguments[arguments.length-1];browser.runtime.sendMessage({type:"getSupportState"}).then(done);',
+        )
+      ).data.successfulPdfExports === 1,
+    10000,
+  );
   await driver.switchTo().window(chatHandle);
   console.log(
     'PASS Firefox: real add-on installation, MV3 background, main-page highlight, reload persistence, notebook messages, native APIs, full PDF download',
