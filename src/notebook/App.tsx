@@ -17,6 +17,7 @@ import {
 import type { ConversationSnapshot, Database, Notebook } from '../types';
 import { storage } from '../storage/storage';
 import { settings } from '../storage/settings';
+import { requestNotebookPersistence } from '../storage/persistence';
 import { conversationKey } from '../storage/repository';
 import { chaptersOf } from './chapters';
 import {
@@ -135,6 +136,10 @@ export default function App() {
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark);
   }, [dark]);
+  const notebookCount = db?.notebooks.length ?? 0;
+  useEffect(() => {
+    if (isExtensionContext()) void requestNotebookPersistence(notebookCount);
+  }, [notebookCount]);
   const key = context && conversationKey(context);
   const currentId = key ? db?.activeByConversation[key] : undefined;
   const notebook: Notebook | undefined =

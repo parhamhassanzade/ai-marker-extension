@@ -28,6 +28,12 @@ Additional checks:
 
 ## Architecture plan
 
+### Persistent-storage policy
+
+The extension page requests `navigator.storage.persist()` once it has a saved notebook, including archives loaded on reopening. It checks an existing grant first, handles unsupported APIs and failures, and makes at most one attempt per page session. Content scripts never make this request: that would target the ChatGPT origin rather than the extension. Notebook writes still belong exclusively to the serialized worker; persistence does not change the database schema or lifecycle state.
+
+`unlimitedStorage` has deliberately not been added. Chrome documents it as exempting extension/web storage from quota restrictions and eviction, while `persist()` requests protection from eviction without lifting quota. The broader permission can support large archives but still is not a backup or protection against user deletion/uninstall. Review the permission with the project owner before adding it. See [Chrome storage and cookies](https://developer.chrome.com/docs/extensions/develop/concepts/storage-and-cookies) and [StorageManager.persist()](https://developer.mozilla.org/en-US/docs/Web/API/StorageManager/persist).
+
 The extension has four boundaries:
 
 1. **Platform adapters and content extraction** detect the conversation and capture its ordered messages, title, stable message IDs, and timestamps when available. Only the ChatGPT adapter is enabled.

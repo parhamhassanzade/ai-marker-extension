@@ -6,6 +6,7 @@
 - Added CI for pushes and pull requests: install, typecheck, unit tests, build, formatting, and headless Chromium smoke.
 - Added an MIT license as a placeholder for the project owner to review. Bundled fonts retain their own licenses.
 - Separated current usage from historical release notes and corrected highlight selection scope.
+- Request persistent storage from the extension page after a notebook is saved or loaded, without adding permissions. Denied, unsupported, and failed requests do not block notebook operations; attempts are limited to once per page session.
 
 ## 3.0.3
 

@@ -41,13 +41,25 @@ try {
     });
   await expect.poll(async () => (await stored()).length).toBe(0);
   const panel = await browser.newPage();
+  await panel.addInitScript(() => {
+    window.__persistenceRequests = 0;
+    Object.defineProperty(navigator.storage, 'persisted', { value: async () => false });
+    Object.defineProperty(navigator.storage, 'persist', {
+      value: async () => {
+        window.__persistenceRequests++;
+        throw new Error('Simulated persistence failure');
+      },
+    });
+  });
   panel.on('pageerror', (e) => failures.push(e.message));
   await panel.setViewportSize({ width: 430, height: 1000 });
   await panel.goto(`chrome-extension://${extensionId}/sidepanel.html`);
   await chat.bringToFront();
   await expect(panel.getByRole('button', { name: 'Create notebook', exact: true })).toBeEnabled();
+  expect(await panel.evaluate(() => window.__persistenceRequests)).toBe(0);
   await panel.getByRole('button', { name: 'Create notebook', exact: true }).click();
   await expect(panel.getByRole('region', { name: 'Notebook home' })).toBeVisible();
+  await expect.poll(() => panel.evaluate(() => window.__persistenceRequests)).toBe(1);
   await panel.getByRole('button', { name: 'Read', exact: true }).click();
   await expect(panel.locator('.chapter-heading').first()).toBeVisible();
   await expect(panel.getByRole('button', { name: 'Pause updates', exact: true })).toBeEnabled();
@@ -107,6 +119,7 @@ try {
   await expect(panel.locator('.chapter-heading').nth(1)).toContainText('Explain attention.');
   expect((await stored())[0].id).toBe(notebookId);
   expect((await stored())[0].messages).toHaveLength(4);
+  expect(await panel.evaluate(() => window.__persistenceRequests)).toBe(1);
   await selectQuote('a2', 'different weights');
   await panel.getByRole('button', { name: '🔴 Important', exact: true }).click();
   await expect(panel.locator('mark[data-highlight-id]')).toHaveCount(2);
