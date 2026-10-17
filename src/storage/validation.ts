@@ -1,10 +1,11 @@
 import type { Command, ConversationSnapshot, Highlight } from '../types';
+import { isMessageContent } from '../content/model/validation';
 const platforms = new Set(['ChatGPT', 'Claude', 'Gemini', 'Perplexity']);
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 const isText = (value: unknown, limit: number) =>
   typeof value === 'string' && value.length <= limit;
-function isSnapshot(value: unknown): value is ConversationSnapshot {
+export function isSnapshot(value: unknown): value is ConversationSnapshot {
   if (
     !isRecord(value) ||
     !platforms.has(String(value.platform)) ||
@@ -28,6 +29,10 @@ function isSnapshot(value: unknown): value is ConversationSnapshot {
       isText(m.id, 300) &&
       (m.role === 'user' || m.role === 'assistant') &&
       isText(m.text, 2_000_000) &&
+      ((m.contentVersion === undefined && m.content === undefined) ||
+        (m.role === 'assistant' &&
+          m.contentVersion === 1 &&
+          isMessageContent(m.content, String(m.text)))) &&
       (m.timestamp === undefined ||
         (isText(m.timestamp, 40) && Number.isFinite(Date.parse(String(m.timestamp))))) &&
       (m.order === undefined || (Number.isInteger(m.order) && Number(m.order) >= 0)),
@@ -35,7 +40,7 @@ function isSnapshot(value: unknown): value is ConversationSnapshot {
 }
 const isTags = (value: unknown) =>
   Array.isArray(value) && value.length <= 20 && value.every((tag) => isText(tag, 50));
-function isHighlight(value: unknown): value is Highlight {
+export function isHighlight(value: unknown): value is Highlight {
   if (!isRecord(value) || !isRecord(value.anchor)) return false;
   const a = value.anchor;
   return (

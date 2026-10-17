@@ -1,3 +1,4 @@
+import type { MessageContent } from '../content/model/types';
 export type Platform = 'ChatGPT' | 'Claude' | 'Gemini' | 'Perplexity';
 export type HighlightColor = 'yellow' | 'green' | 'red';
 export interface Message {
@@ -6,6 +7,8 @@ export interface Message {
   text: string;
   timestamp?: string;
   order?: number;
+  contentVersion?: 1;
+  content?: MessageContent;
 }
 export interface ConversationSnapshot {
   platform: Platform;

@@ -1,3 +1,5 @@
+export const UI_SELECTOR =
+  'button, [role="button"], input, textarea, select, svg, script, style, time, nav, aside, [hidden], [aria-hidden="true"], [data-testid*="message-actions"], [data-testid*="feedback"], .sr-only, .visually-hidden';
 export const MESSAGE_SELECTOR =
   '[data-message-author-role="user"], [data-message-author-role="assistant"]';
 export const TURN_SELECTOR =

@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "notebooks": [
+    {
+      "id": "legacy-notebook",
+      "title": "Pre-rich notebook",
+      "conversationTitle": "Pre-rich notebook",
+      "platform": "ChatGPT",
+      "conversationId": "legacy-chat",
+      "website": "https://chatgpt.com/c/legacy-chat",
+      "createdAt": "2026-10-13T10:00:00.000Z",
+      "updatedAt": "2026-10-13T10:01:00.000Z",
+      "messages": [
+        {
+          "id": "legacy-q",
+          "role": "user",
+          "text": "Explain gradients."
+        },
+        {
+          "id": "legacy-a",
+          "role": "assistant",
+          "text": "Weights change.\n\nKeep this code:\n  step()"
+        }
+      ],
+      "highlights": [
+        {
+          "id": "legacy-h",
+          "platform": "ChatGPT",
+          "conversationId": "legacy-chat",
+          "messageId": "legacy-a",
+          "text": "Weights",
+          "color": "green",
+          "note": "Keep my note",
+          "createdAt": "2026-10-13T10:01:00.000Z",
+          "website": "https://chatgpt.com/c/legacy-chat",
+          "anchor": {
+            "start": 0,
+            "end": 7,
+            "prefix": "",
+            "suffix": " change.\n\nKeep this code:\n  step()"
+          },
+          "tags": ["study"],
+          "bookmarked": true
+        }
+      ]
+    }
+  ],
+  "activeByConversation": {
+    "ChatGPT:legacy-chat": "legacy-notebook"
+  },
+  "pausedConversations": []
+}

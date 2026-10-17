@@ -4,7 +4,7 @@ it('captures only user questions and assistant answer bodies with stable message
   document.body.innerHTML =
     '<div data-message-author-role="user" data-message-id="q">Explain gradients</div><div data-message-author-role="assistant" data-message-id="a"><div class="markdown"><p>Minimize loss.</p><pre>code()</pre></div><button>Copy</button></div>';
   const parser = new ChatGPTAdapter();
-  expect(parser.extractMessages()).toEqual([
+  expect(parser.extractMessages()).toMatchObject([
     { id: 'q', role: 'user', text: 'Explain gradients' },
     { id: 'a', role: 'assistant', text: 'Minimize loss.\n\ncode()' },
   ]);
@@ -13,7 +13,7 @@ it('captures only user questions and assistant answer bodies with stable message
 it('extracts available timestamps and absolute platform turn positions', () => {
   document.body.innerHTML =
     '<article data-testid="conversation-turn-12"><div data-message-author-role="assistant" data-message-id="stable"><time datetime="2026-10-13T10:30:00Z"></time><div class="markdown">Full answer.</div></div></article>';
-  expect(new ChatGPTAdapter().extractMessages()[0]).toEqual({
+  expect(new ChatGPTAdapter().extractMessages()[0]).toMatchObject({
     id: 'stable',
     role: 'assistant',
     text: 'Full answer.',

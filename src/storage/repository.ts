@@ -107,8 +107,31 @@ export function transition(db: Database, command: Command): Database {
     for (let i = 0; i < s.messages.length; i++) {
       const message = s.messages[i]!;
       const index = notebook.messages.findIndex((m) => m.id === message.id);
-      if (index >= 0) notebook.messages[index] = structuredClone(message);
-      else {
+      if (index >= 0) {
+        const existing = notebook.messages[index]!;
+        // Do not let the first rich snapshot overwrite a historical assistant
+        // turn. Explicit recapture must compare its saved ID and exact text;
+        // otherwise an edited/regenerated turn could be silently "upgraded".
+        if (
+          existing.role === 'assistant' &&
+          existing.contentVersion === undefined &&
+          message.contentVersion !== undefined
+        )
+          continue;
+        const incoming = structuredClone(message);
+        // Existing plain-text messages are never upgraded by background capture,
+        // activation, annotation, or resume. Only explicit recapture may do that.
+        if (existing.contentVersion === undefined) {
+          delete incoming.contentVersion;
+          delete incoming.content;
+        } else if (incoming.contentVersion === undefined && existing.text === incoming.text) {
+          // Retain key order too: the current write/notification guard compares
+          // JSON, so rebuilding equivalent objects could otherwise trigger loops.
+          notebook.messages[index] = Object.assign(structuredClone(existing), incoming);
+          continue;
+        }
+        notebook.messages[index] = incoming;
+      } else {
         const following = s.messages
           .slice(i + 1)
           .find((m) => notebook.messages.some((old) => old.id === m.id));

@@ -1,5 +1,6 @@
 import { beforeEach, afterEach, it, expect, vi } from 'vitest';
 import { IDBFactory } from 'fake-indexeddb';
+import { readFileSync } from 'node:fs';
 import type { Command, Result, ConversationSnapshot, Highlight, Database } from '../src/types';
 let listener: (
   command: unknown,
@@ -173,4 +174,71 @@ it('rejects stale selections after the current tab moves to a different conversa
   );
   expect(result.ok).toBe(false);
   expect(await database.readDatabase()).toBeUndefined();
+});
+
+it('migrates a real pre-rich fixture without changing messages, highlights, or anchors', async () => {
+  const original = JSON.parse(
+    readFileSync('tests/fixtures/pre-rich-database.json', 'utf8'),
+  ) as Database;
+  local['aiMarker.v1'] = structuredClone(original);
+  const result = await send({ type: 'list' });
+  expect(result.ok).toBe(true);
+  const migrated = (await database.readDatabase())!;
+  expect(migrated.notebooks).toEqual(original.notebooks);
+  expect(migrated.activeByConversation).toEqual({});
+  expect(migrated.pausedConversations).toContain('ChatGPT:legacy-chat');
+  expect(local['aiMarker.v1']).toBeUndefined();
+});
+
+it('preserves both archive and lifecycle metadata when a rich-content commit fails', async () => {
+  await send({ type: 'activate', snapshot });
+  const original = (await database.readDatabase())!;
+  const rich: ConversationSnapshot = {
+    ...snapshot,
+    messages: [
+      {
+        ...snapshot.messages[0]!,
+        contentVersion: 1,
+        content: {
+          blocks: [
+            {
+              type: 'paragraph',
+              children: [
+                {
+                  type: 'text',
+                  text: 'insight',
+                  marks: { bold: true },
+                  mappings: [{ start: 0, end: 7, textStart: 0, textEnd: 7 }],
+                },
+              ],
+            },
+          ],
+          gaps: [],
+        },
+      },
+    ],
+  };
+  vi.spyOn(database, 'writeDatabase').mockRejectedValueOnce(new Error('Transaction aborted'));
+  expect((await send({ type: 'create', snapshot: rich })).ok).toBe(false);
+  expect(await database.readDatabase()).toEqual(original);
+  expect((await send({ type: 'create', snapshot: rich })).ok).toBe(true);
+  const saved = (await database.readDatabase())!;
+  expect(saved.notebooks.at(-1)!.messages[0]!.contentVersion).toBe(1);
+  const invalid = structuredClone(rich);
+  invalid.messages[0]!.content!.gaps.push({ start: 0, end: 1 });
+  expect((await send({ type: 'create', snapshot: invalid })).ok).toBe(false);
+  expect(await database.readDatabase()).toEqual(saved);
+});
+
+it('keeps a pre-rich legacy archive available when its migration transaction fails', async () => {
+  const original = JSON.parse(
+    readFileSync('tests/fixtures/pre-rich-database.json', 'utf8'),
+  ) as Database;
+  local['aiMarker.v1'] = structuredClone(original);
+  vi.spyOn(database, 'writeDatabase').mockRejectedValueOnce(new Error('Migration aborted'));
+  expect((await send({ type: 'list' })).ok).toBe(false);
+  expect(await database.readDatabase()).toBeUndefined();
+  expect(local['aiMarker.v1']).toEqual(original);
+  expect((await send({ type: 'list' })).ok).toBe(true);
+  expect((await database.readDatabase())!.notebooks).toEqual(original.notebooks);
 });
