@@ -44,7 +44,7 @@ it('shares concurrent recovery injections for one tab', async () => {
 });
 it('does not inject into unsupported or non-HTTPS pages', async () => {
   query.mockResolvedValue([{ id: 7, url: 'https://example.com' }]);
-  await expect(currentConversation()).rejects.toThrow(/No ChatGPT conversation/);
+  await expect(currentConversation()).rejects.toThrow(/No AI conversation/);
   expect(inject).not.toHaveBeenCalled();
   expect(isSupportedUrl('http://chatgpt.com/c/x')).toBe(false);
   expect(isSupportedUrl('https://chatgpt.com.evil.example/c/x')).toBe(false);

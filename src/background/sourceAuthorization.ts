@@ -1,6 +1,5 @@
 import type { ConversationSnapshot } from '../types';
-const supported = (url: URL) =>
-  url.protocol === 'https:' && ['chatgpt.com', 'chat.openai.com'].includes(url.hostname);
+import { conversationIdOf, platformOf } from '../platforms';
 export function matchesHighlightSource(
   snapshot: ConversationSnapshot,
   sender: Pick<chrome.runtime.MessageSender, 'url' | 'frameId'>,
@@ -14,16 +13,15 @@ export function matchesHighlightSource(
     // Trust it for the origin, and read the tab's live URL for conversation scope.
     if (
       (sender.frameId ?? 0) !== 0 ||
-      snapshot.platform !== 'ChatGPT' ||
-      !supported(documentUrl) ||
-      !supported(current) ||
-      !supported(target) ||
+      platformOf(documentUrl.href) !== snapshot.platform ||
+      platformOf(current.href) !== snapshot.platform ||
+      platformOf(target.href) !== snapshot.platform ||
       documentUrl.origin !== target.origin ||
       current.origin !== target.origin ||
       current.pathname !== target.pathname
     )
       return false;
-    const id = target.pathname.match(/\/c\/([^/]+)/)?.[1];
+    const id = conversationIdOf(snapshot.platform, target.pathname);
     return id ? id === snapshot.conversationId : snapshot.conversationId.startsWith('temporary:');
   } catch {
     return false;

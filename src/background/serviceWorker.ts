@@ -2,6 +2,9 @@ import { extension } from '../browser/api';
 import { SURFACE_PREFERENCE_KEY, surfacePreference } from '../browser/surfacePreference';
 import { configureNotebookSurface } from './notebookSurface';
 import { matchesHighlightSource } from './sourceAuthorization';
+import { createSourceTabRegistry } from './sourceTabRegistry';
+import { watchOptionalPlatforms } from './optionalPlatforms';
+import { LIST_SOURCE_TABS, SOURCE_HELLO } from '../browser/sourceTabs';
 import { isCommand } from '../storage/validation';
 import { STORAGE_KEY } from '../storage/storage';
 import { emptyDatabase, transition } from '../storage/repository';
@@ -15,6 +18,7 @@ import {
   type SupportResult,
 } from '../storage/support';
 let queue: Promise<unknown> = Promise.resolve();
+const sourceTabs = createSourceTabRegistry();
 async function loadDatabase(): Promise<Database> {
   const existing = await readDatabase();
   if (existing) return existing;
@@ -146,6 +150,27 @@ extension.runtime.onMessage.addListener((command: unknown, sender, respond) => {
     }
     return true;
   }
+  if (typeof command === 'object' && command && 'type' in command) {
+    if (command.type === SOURCE_HELLO) {
+      void sourceTabs.hello(sender, 'title' in command ? command.title : undefined).then(
+        (ok) => respond({ ok }),
+        () => respond({ ok: false }),
+      );
+      return true;
+    }
+    if (command.type === LIST_SOURCE_TABS) {
+      // Tab titles and URLs are only for the notebook, never for page scripts.
+      if (!sender.url?.startsWith(extension.runtime.getURL('/'))) {
+        respond({ ok: false, error: 'Source tabs are available in the notebook.' });
+        return false;
+      }
+      void sourceTabs.list().then(
+        (tabs) => respond({ ok: true, tabs }),
+        () => respond({ ok: true, tabs: [] }),
+      );
+      return true;
+    }
+  }
   if (isSupportCommand(command)) {
     // Only extension pages may record exports or dismiss the note. Content
     // scripts must not be able to increment this counter or change preferences.
@@ -216,7 +241,10 @@ extension.runtime.onMessage.addListener((command: unknown, sender, respond) => {
   void task.then(respond);
   return true;
 });
+extension.tabs.onRemoved?.addListener((tabId) => void sourceTabs.remove(tabId));
+extension.tabs.onUpdated?.addListener((tabId, info) => void sourceTabs.navigated(tabId, info.url));
 void extension.storage.local
   .setAccessLevel?.({ accessLevel: 'TRUSTED_CONTEXTS' })
   .catch(console.error);
 const notebookSurfaces = configureNotebookSurface();
+watchOptionalPlatforms();

@@ -1,12 +1,13 @@
 # AI Notebook – Privacy Policy
 
-Last updated: 17 October 2026
+Last updated: 21 October 2026
 
-AI Notebook is a browser extension that saves ChatGPT conversations you choose as study notebooks.
+AI Notebook is a browser extension that saves ChatGPT and Claude conversations you choose as study notebooks.
 
 ## What the extension accesses
 
-- The text of ChatGPT conversations on chatgpt.com and chat.openai.com to capture or update notebooks and save highlights you choose. Active notebooks can capture new replies automatically until you pause updates or finish the notebook.
+- The text of ChatGPT conversations on chatgpt.com and chat.openai.com, and of Claude conversations on claude.ai, to capture or update notebooks and save highlights you choose. Active notebooks can capture new replies automatically until you pause updates or finish the notebook.
+- Access to claude.ai is optional. The extension reads Claude conversations only after you click **Allow claude.ai** and grant access in your browser. You can remove that access at any time in your browser's extension settings.
 - The highlights, notes, tags, bookmarks and settings you create.
 
 ## Where your data is stored

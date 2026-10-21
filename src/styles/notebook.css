@@ -1134,3 +1134,37 @@ button {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
+
+.source-picker {
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+.source-picker select {
+  font: inherit;
+  font-size: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+.claude-access {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.6;
+  margin-block: 12px;
+}
+.claude-access p {
+  margin: 0 0 6px;
+}
+.claude-access.compact {
+  border: 0;
+  padding: 0;
+  margin: 4px 0 0;
+}

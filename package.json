@@ -20,7 +20,8 @@
     "lint:firefox": "addons-linter build/firefox",
     "package": "npm run build && node scripts/package.mjs",
     "test:ux": "npm run build && node scripts/notebook-ux.mjs",
-    "test:support": "npm run build && node scripts/support.mjs"
+    "test:support": "npm run build && node scripts/support.mjs",
+    "test:claude": "npm run build && node scripts/claude-smoke.mjs"
   },
   "dependencies": {
     "jspdf": "4.2.1",

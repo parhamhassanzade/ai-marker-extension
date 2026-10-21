@@ -22,13 +22,19 @@ import { requestNotebookPersistence } from '../storage/persistence';
 import { conversationKey } from '../storage/repository';
 import { chaptersOf } from './chapters';
 import {
+  chooseSourceTab,
   currentConversation,
+  currentSource,
   currentSourceTab,
   conversationFromTab,
   waitForLoadedMessages,
   ensureContentScript,
+  NoSourceTabError,
+  type SourceCandidate,
 } from './connection';
 import { NotebookView } from './NotebookView';
+import { ClaudeAccess, useClaudeAccess } from './ClaudeAccess';
+import { platformOf } from '../platforms';
 import { AboutSupport, ExportSupport, MainSupport, FeedbackLink } from './Support';
 import {
   support,
@@ -47,6 +53,10 @@ export default function App() {
   const [title, setTitle] = useState('');
   const [error, setError] = useState('');
   const [connectionError, setConnectionError] = useState('');
+  const [noSourceTab, setNoSourceTab] = useState(false);
+  const [sourceIsClaude, setSourceIsClaude] = useState(false);
+  const claude = useClaudeAccess();
+  const [sourceCandidates, setSourceCandidates] = useState<SourceCandidate[]>([]);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [clear, setClear] = useState(false);
@@ -72,15 +82,27 @@ export default function App() {
   const refreshContext = useCallback(async () => {
     const request = ++contextRequest.current;
     try {
-      const { tabId: id, snapshot } = await currentConversation();
+      const source = await currentSource();
       if (request !== contextRequest.current) return;
-      tabId.current = id;
+      setSourceIsClaude(platformOf(source.tab.url) === 'Claude');
+      // Keep the picker even if reading the chosen conversation fails.
+      setSourceCandidates(source.candidates);
+      setNoSourceTab(false);
+      const snapshot = await conversationFromTab(source.tab.id!);
+      if (request !== contextRequest.current) return;
+      tabId.current = source.tab.id;
       setContext(snapshot?.platform ? snapshot : undefined);
       setConnectionError('');
     } catch (failure) {
       if (request === contextRequest.current) {
         setContext(undefined);
         tabId.current = undefined;
+        const missing = failure instanceof NoSourceTabError;
+        setNoSourceTab(missing);
+        if (missing) {
+          setSourceCandidates([]);
+          setSourceIsClaude(false);
+        }
         setConnectionError(
           failure instanceof Error
             ? failure.message
@@ -222,7 +244,7 @@ export default function App() {
           throw new Error(capture.error || 'Could not capture conversation history.');
         setCaptureNotice(
           capture.complete
-            ? `ChatGPT conversation detected: ${(await storage.listNotebooks()).notebooks.find((n) => n.id === result.activeByConversation[conversationKey(snapshot)])?.messages.length ?? snapshot.messages.length} messages imported.`
+            ? `${snapshot.platform} conversation detected: ${(await storage.listNotebooks()).notebooks.find((n) => n.id === result.activeByConversation[conversationKey(snapshot)])?.messages.length ?? snapshot.messages.length} messages imported.`
             : 'Capture stopped before reaching the start. You can activate again or scroll through older turns to continue capture.',
         );
       } finally {
@@ -287,7 +309,7 @@ export default function App() {
               </>
             )}
           </h1>
-          <p>{context ? context.title : 'Open a ChatGPT conversation to get started.'}</p>
+          <p>{context ? context.title : 'Open a ChatGPT or Claude conversation to get started.'}</p>
         </div>
         <button
           className={`mode-button ${currentId ? 'active' : ''}`}
@@ -317,18 +339,46 @@ export default function App() {
             : 'Create a notebook to save this conversation and collect its best ideas.'}
         </p>
       </section>
-      {connectionError && (
-        <div className="connection-notice" role="status">
-          {connectionError}
-          <button
-            className="text-button"
-            onClick={() => {
+      {sourceCandidates.length > 1 && (
+        <label className="source-picker">
+          Which conversation?
+          <select
+            value={tabId.current ?? ''}
+            disabled={busy}
+            onChange={(event) => {
+              chooseSourceTab(Number(event.target.value));
+              setSelected('');
               void refreshContext();
             }}
           >
-            Retry connection
-          </button>
+            {tabId.current === undefined && <option value="">Choose a conversation tab</option>}
+            {sourceCandidates.map((candidate) => (
+              <option key={candidate.tabId} value={candidate.tabId}>
+                {candidate.title || new URL(candidate.url).pathname}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {connectionError && sourceIsClaude && claude.granted === false ? (
+        <div className="connection-notice" role="status">
+          Allow AI Notebook on claude.ai to use this conversation.
+          <ClaudeAccess compact request={claude.request} onGranted={() => void refreshContext()} />
         </div>
+      ) : (
+        connectionError && (
+          <div className="connection-notice" role="status">
+            {connectionError}
+            <button
+              className="text-button"
+              onClick={() => {
+                void refreshContext();
+              }}
+            >
+              {noSourceTab ? 'Refresh' : 'Retry connection'}
+            </button>
+          </div>
+        )
       )}
       {captureNotice && (
         <p className="capture-notice" role="status">
@@ -447,7 +497,8 @@ export default function App() {
                   Open source conversation <ArrowUpRight size={13} />
                 </a>
                 <p className="reading-hint">
-                  Save the ideas you want to return to. Highlight on ChatGPT or while reading here.
+                  Save the ideas you want to return to. Highlight on the chat page or while reading
+                  here.
                 </p>
               </section>
               <NotebookView
@@ -547,7 +598,7 @@ export default function App() {
               </p>
               {!context && (
                 <p>
-                  Open an existing ChatGPT conversation. Claude and Gemini support is coming later.
+                  Open an existing ChatGPT or Claude conversation. Gemini support is coming later.
                 </p>
               )}
             </div>
@@ -570,6 +621,9 @@ export default function App() {
             <Plus size={15} />
             New notebook for this conversation
           </button>
+          {claude.granted === false && (
+            <ClaudeAccess request={claude.request} onGranted={() => void refreshContext()} />
+          )}
           <footer>Stored on this device · Yours to keep</footer>
           {isExtensionContext() && 'side_panel' in extension.runtime.getManifest() && (
             <SurfaceSettings />

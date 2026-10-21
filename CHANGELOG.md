@@ -4,6 +4,8 @@
 
 - Merge Chrome, Edge, and Arc into the same Chromium package with runtime side-panel verification and a separate-window fallback. Add a locally saved notebook-surface setting; keep Firefox's native sidebar and manifest unchanged. Retire the separate Arc archive.
 
+- Added Claude (claude.ai) support: capture, reading, highlights on the Claude page, and PDF export, using the same notebook features as ChatGPT. Claude access is an optional host permission, requested when you click **Allow claude.ai**. Existing users see no new install-time permission warning. Claude messages are identified by position because claude.ai exposes no message IDs.
+- Fixed a notebook opened as a tab (Orion on iPad) reporting no ChatGPT conversation. The worker keeps a session-only list of live ChatGPT tabs from content-script hellos. A notebook tab reads the tab it was opened from, then the most recently seen ChatGPT tab, and offers a "Which conversation?" picker when several are open. If none is open, it asks you to open chatgpt.com and tap Refresh. Side panels and sidebars are unchanged.
 - Added feedback/problem-reporting email links in the extension header, About area, and exported PDF footer.
 - Made the optional support link visible in the main extension header and added a clickable Ko-fi link to every exported PDF page footer, using the shared donation URL.
 - Added an optional Ko-fi link in About and a dismissible inline thank-you after the third successful PDF export. The counter and permanent dismissal stay local; there are no new permissions, analytics, background network requests, pop-ups, or feature restrictions. The Ko-fi page opens only when its link is clicked.

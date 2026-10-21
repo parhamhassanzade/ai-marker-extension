@@ -65,12 +65,24 @@ export interface Database {
   activeByConversation: Record<string, string>;
   pausedConversations: string[];
 }
+/** A message's live DOM root, with the same ID that extractMessages() reports. */
+export interface SourceMessage {
+  element: HTMLElement;
+  role: Message['role'];
+  id: string;
+}
 export interface AIPlatformAdapter {
   platform: Platform;
   detectConversation(): boolean;
   extractMessages(): Message[];
   extractTitle(): string;
   getConversationId(): string;
+  /** Ordered message roots used for on-page highlights and history scrolling. */
+  sourceMessages(): SourceMessage[];
+  /** Canonical message text; must equal the extracted message.text. */
+  sourceText(element: HTMLElement): string;
+  /** A new, unsaved chat starts a fresh temporary conversation ID. */
+  resetTemporaryId?(): void;
 }
 export type Command =
   | {

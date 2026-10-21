@@ -3,13 +3,7 @@ import { snapshotOf } from '../adapters';
 import { storage } from '../storage/storage';
 import { conversationKey } from '../storage/repository';
 import type { AIPlatformAdapter, Database, Highlight as SavedHighlight } from '../types';
-import {
-  contentOf,
-  messageContainers,
-  messageId,
-  cleanMessageText,
-  UI_SELECTOR,
-} from './chatgpt/extractor';
+import { UI_SELECTOR } from './chatgpt/extractor';
 import { isHidden } from './chatgpt/detector';
 import { COLORS, highlightSegments } from './highlighter';
 import { createToolbar } from './toolbar';
@@ -98,13 +92,11 @@ export function startSourceHighlighter(adapter: AIPlatformAdapter): () => void {
       db?.notebooks.filter((n) => conversationKey(n) === key).at(-1);
     const ranges = { yellow: [] as Range[], green: [] as Range[], red: [] as Range[] };
     // Do not parse every full answer on every repaint in long conversations.
-    (notebook?.highlights.length ? messageContainers() : []).forEach(
-      ({ element, role, turn }, index) => {
-        const id = messageId(element, role, turn, index);
+    (notebook?.highlights.length ? adapter.sourceMessages() : []).forEach(
+      ({ element: root, id }) => {
         const highlights = notebook?.highlights.filter((h) => h.messageId === id) ?? [];
         if (!highlights.length) return;
-        const root = contentOf(element);
-        const text = cleanMessageText(root);
+        const text = adapter.sourceText(root);
         const map = sourceTextMap(root, text);
         for (const segment of highlightSegments(text, highlights)) {
           const highlight = segment.highlights.at(-1);
@@ -138,19 +130,18 @@ export function startSourceHighlighter(adapter: AIPlatformAdapter): () => void {
       return;
     }
     const range = selection.getRangeAt(0).cloneRange();
-    const containers = messageContainers();
-    const index = containers.findIndex(
-      ({ element }) =>
-        element.contains(range.startContainer) && element.contains(range.endContainer),
-    );
-    const container = containers[index];
+    const container = adapter
+      .sourceMessages()
+      .find(
+        ({ element }) =>
+          element.contains(range.startContainer) && element.contains(range.endContainer),
+      );
     if (!container) {
       toolbar.hide();
       return;
     }
-    const root = contentOf(container.element);
-    if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) return;
-    const text = cleanMessageText(root);
+    const root = container.element;
+    const text = adapter.sourceText(root);
     const map = sourceTextMap(root, text);
     const selected = map.filter(
       (char) =>
@@ -162,7 +153,7 @@ export function startSourceHighlighter(adapter: AIPlatformAdapter): () => void {
     const end = selected.at(-1)!.canonical + 1;
     if (end - start > 50_000) return;
     const snapshot = snapshotOf(adapter);
-    const id = messageId(container.element, container.role, container.turn, index);
+    const id = container.id;
     toolbar.show(range.getBoundingClientRect(), {
       cancel: () => selection.removeAllRanges(),
       save: async (color, note) => {

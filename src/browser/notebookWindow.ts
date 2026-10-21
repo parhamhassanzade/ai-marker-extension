@@ -1,6 +1,6 @@
 import { extension } from './api';
 export async function openNotebookWindow(tab: chrome.tabs.Tab) {
-  if (tab.windowId === undefined) throw new Error('Open a ChatGPT tab and try again.');
+  if (tab.windowId === undefined) throw new Error('Open a ChatGPT or Claude tab and try again.');
   const base = extension.runtime.getURL('sidepanel.html');
   const url = `${base}?sourceWindow=${tab.windowId}&sourceTab=${tab.id ?? ''}`;
   const windows = await extension.windows

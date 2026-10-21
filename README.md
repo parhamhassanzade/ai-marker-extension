@@ -1,6 +1,6 @@
 # AI Notebook
 
-AI Notebook **3.0.3** is a desktop browser extension that turns captured ChatGPT conversations into chaptered study notebooks with highlights, notes, tags, bookmarks, and PDF export. Everything stays local to your browser profile; there are no analytics, accounts, model calls, or cloud sync.
+AI Notebook **3.0.3** is a desktop browser extension that turns captured ChatGPT and Claude conversations into chaptered study notebooks with highlights, notes, tags, bookmarks, and PDF export. Everything stays local to your browser profile; there are no analytics, accounts, model calls, or cloud sync.
 
 ## Build and install
 
@@ -17,7 +17,7 @@ npm run build
 | Arc desktop                                | `dist/`          | Side panel or separate notebook window |
 | Firefox desktop 140+                       | `build/firefox/` | Native sidebar                         |
 
-ChatGPT is the only enabled AI platform. Supported hosts are `https://chatgpt.com` and `https://chat.openai.com`. Mobile browsers are not supported.
+Supported AI platforms are ChatGPT (`https://chatgpt.com`, `https://chat.openai.com`) and Claude (`https://claude.ai`). Claude access is optional: click **Allow claude.ai** in the notebook and accept the browser prompt. Mobile browsers are not supported.
 
 ### Chrome and Edge
 
@@ -79,9 +79,9 @@ Read the [Privacy Policy](PRIVACY.md) for details about data access, local stora
 
 - Captured text, annotations, and session state are stored in IndexedDB; small preferences are in browser local storage. The extension does not encrypt this data. Uninstalling removes it; browser-profile loss or user-cleared storage can also remove it. Restorable backup/import and notebook deletion are not implemented yet. A PDF preserves readable output, but cannot restore an editable notebook.
 - Existing `aiMarker.v1` archives migrate on first access. The legacy blob is removed only after a successful IndexedDB commit, and migrated capture starts paused.
-- Permissions are `storage`, `activeTab`, `sidePanel` (Chrome/Edge), and `scripting`, with host access restricted to the two ChatGPT hosts. No broad `tabs` or `downloads` permission is requested.
+- Permissions are `storage`, `activeTab`, `sidePanel` (Chrome/Edge), and `scripting`, with host access restricted to the two ChatGPT hosts. `https://claude.ai/*` is an optional host permission, requested only when you click **Allow claude.ai**. No broad `tabs` or `downloads` permission is requested.
 - “Full conversation” means **captured text**, not guaranteed server history. The scan is bounded to 60 steps; hidden branches, unexposed history, collapsed content, images, canvas documents, and other media cannot be recovered automatically. A stable scroll position is not proof of complete history.
-- Extraction depends on ChatGPT's changing page structure. Automated browser tests use realistic fixtures, not signed-in ChatGPT. Native Edge/Arc UI, signed-in ChatGPT, and Firefox releases need manual release checks. The Arc compatibility script tests the shared package and fallback in Chromium, not native Arc.
+- Extraction depends on ChatGPT's and Claude's changing page structure. Claude exposes no message IDs, so Claude messages are identified by position; editing an earlier Claude message can leave later highlights matched by quote only. Automated browser tests use realistic fixtures, not signed-in ChatGPT. Native Edge/Arc UI, signed-in ChatGPT, and Firefox releases need manual release checks. The Arc compatibility script tests the shared package and fallback in Chromium, not native Arc.
 - Stable platform IDs are preferred. Positional IDs, regenerated answers, branches, and virtualized layouts have identity limitations. Ambiguous highlights can remain unpainted; saved notes are retained.
 - Temporary chats use an in-page UUID until matching turns establish a stable URL. Reloading an unsaved temporary chat can create a different notebook identity. Normal saved conversations preserve lifecycle state across reloads.
 - PDFs preserve text, code indentation, and line breaks. Rich Markdown appearance, formulas, media, and rich tables are not reproduced visually. Bundled fonts support Persian/Arabic, Latin, Greek, and Cyrillic; unsupported characters, including most CJK and emoji, become `[U+CODEPOINT]` tokens. Copy/search of joined Arabic glyphs varies by PDF reader.

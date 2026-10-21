@@ -323,3 +323,25 @@ it('rejects surface preference changes from content scripts', () => {
   expect(respond).toHaveBeenCalledWith(expect.objectContaining({ ok: false }));
   expect(local['aiNotebook.surface']).toBeUndefined();
 });
+it('registers ChatGPT tabs from content scripts and lists them only to the notebook', async () => {
+  const chat = {
+    id: 'test-extension',
+    frameId: 0,
+    url: 'https://chatgpt.com/c/c',
+    tab: { id: 12, windowId: 1, url: 'https://chatgpt.com/c/c' } as chrome.tabs.Tab,
+  };
+  Object.assign(chrome.tabs, { get: async (id: number) => ({ ...chat.tab, id }) });
+  const hello = await new Promise<unknown>((resolve) =>
+    listener({ type: 'sourceHello', title: 'Research' }, chat, resolve),
+  );
+  expect(hello).toEqual({ ok: true });
+  expect(await send({ type: 'listSourceTabs' })).toMatchObject({
+    ok: true,
+    tabs: [{ tabId: 12, title: 'Research', url: 'https://chatgpt.com/c/c' }],
+  });
+  const fromPage = await new Promise<unknown>((resolve) =>
+    listener({ type: 'listSourceTabs' }, chat, resolve),
+  );
+  expect(fromPage).toMatchObject({ ok: false });
+  expect(await database.readDatabase()).toBeUndefined();
+});

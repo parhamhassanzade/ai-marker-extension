@@ -100,8 +100,51 @@ try {
     'href',
     'https://chatgpt.com/g/g-project/c/arc-old',
   );
+  await tabFallback.close();
+  // Orion on iPad: the notebook is a plain tab with no source parameters, and
+  // URL-pattern tab queries are unavailable. Only content-script hellos remain.
+  await worker.evaluate(() => {
+    chrome.tabs.query = async () => {
+      throw new Error('Tab queries unsupported');
+    };
+  });
+  const orion = await context.newPage();
+  await orion.goto(`chrome-extension://${id}/sidepanel.html`);
+  await orion.bringToFront();
+  // arc-old already collects into a notebook, so its mode button pauses updates.
+  await expect(orion.getByRole('button', { name: 'Pause updates', exact: true })).toBeEnabled();
+  await expect(orion.locator('.connection-notice')).toHaveCount(0);
+  await expect(orion.getByText('Which conversation?')).toHaveCount(0);
+  const second = await context.newPage();
+  await second.goto('https://chatgpt.com/c/arc-second');
+  await orion.bringToFront();
+  const picker = orion.getByLabel('Which conversation?');
+  await expect(picker.locator('option')).toHaveCount(2);
+  const secondTab = await orion.evaluate(async () => {
+    const result = await chrome.runtime.sendMessage({ type: 'listSourceTabs' });
+    return result.tabs.find((tab) => tab.url.endsWith('/c/arc-second')).tabId;
+  });
+  await picker.selectOption(String(secondTab));
+  await expect
+    .poll(() => new URL(orion.url()).searchParams.get('sourceTab'))
+    .toBe(String(secondTab));
+  await expect(orion.getByRole('button', { name: 'Create notebook', exact: true })).toBeEnabled();
+  await second.close();
+  await chat.close();
+  await expect(
+    orion.getByText('Open ChatGPT or Claude in another tab, then tap Refresh.'),
+  ).toBeVisible();
+  await orion.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await expect(
+    orion.getByText('Open ChatGPT or Claude in another tab, then tap Refresh.'),
+  ).toBeVisible();
+  const reopened = await context.newPage();
+  await reopened.goto('https://chatgpt.com/c/arc-reopened');
+  await orion.bringToFront();
+  // Refresh or the notebook's own polling reconnects once a chat tab says hello.
+  await expect(orion.getByRole('button', { name: 'Create notebook', exact: true })).toBeEnabled();
   console.log(
-    'PASS shared Chromium package: real side panel, silent and rejected API fallback, window reuse, saved UI preference across reload, original-source SPA capture, rejected window → notebook tab',
+    'PASS shared Chromium package: real side panel, silent and rejected API fallback, window reuse, saved UI preference across reload, original-source SPA capture, rejected window → notebook tab, Orion-style notebook tab (registry, picker, Refresh prompt)',
   );
 } finally {
   await context.close();

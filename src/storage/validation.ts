@@ -1,5 +1,6 @@
 import type { Command, ConversationSnapshot, Highlight } from '../types';
 import { isMessageContent } from '../content/model/validation';
+import { platformOf } from '../platforms';
 const platforms = new Set(['ChatGPT', 'Claude', 'Gemini', 'Perplexity']);
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
@@ -16,13 +17,7 @@ export function isSnapshot(value: unknown): value is ConversationSnapshot {
     !Array.isArray(value.messages)
   )
     return false;
-  try {
-    const url = new URL(String(value.website));
-    if (url.protocol !== 'https:' || !['chatgpt.com', 'chat.openai.com'].includes(url.hostname))
-      return false;
-  } catch {
-    return false;
-  }
+  if (platformOf(String(value.website)) !== value.platform) return false;
   return value.messages.every(
     (m) =>
       isRecord(m) &&

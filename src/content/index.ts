@@ -2,9 +2,10 @@ import { extension } from '../browser/api';
 import { startSourceHighlighter } from './sourceHighlighter';
 import { storage } from '../storage/storage';
 import { detectAdapter, snapshotOf } from '../adapters';
-import { captureHistory } from './chatgpt/history';
+import { captureHistory } from './history';
 import type { AIPlatformAdapter } from '../types';
-import { ChatGPTAdapter } from '../adapters/ChatGPTAdapter';
+import { conversationIdOf } from '../platforms';
+import { SOURCE_HELLO } from '../browser/sourceTabs';
 function startCapture(adapter: AIPlatformAdapter): () => void {
   const stopSourceHighlighter = startSourceHighlighter(adapter);
   let currentPath = location.pathname;
@@ -37,8 +38,7 @@ function startCapture(adapter: AIPlatformAdapter): () => void {
         previousConversationId = currentId;
         const wasTemporary = currentId.startsWith('temporary:');
         currentPath = location.pathname;
-        if (!location.pathname.match(/\/c\/[^/]+/) && adapter instanceof ChatGPTAdapter)
-          adapter.resetTemporaryId();
+        if (!conversationIdOf(adapter.platform, location.pathname)) adapter.resetTemporaryId?.();
         currentId = adapter.getConversationId();
         lastSignature = '';
         // Let the SPA replace its old message DOM before capturing a different chat.
@@ -80,8 +80,26 @@ function startCapture(adapter: AIPlatformAdapter): () => void {
     subtree: true,
     characterData: true,
   });
+  // Register this tab with the worker so a notebook tab can find it without
+  // relying on side-panel context or URL-pattern tab queries.
+  let announcedPath = '';
+  const announce = () => {
+    announcedPath = location.pathname;
+    try {
+      void extension.runtime
+        .sendMessage({ type: SOURCE_HELLO, title: document.title })
+        .catch(() => undefined);
+    } catch {
+      /* An extension reload invalidates the old runtime context. */
+    }
+  };
+  const onVisible = () => {
+    if (document.visibilityState === 'visible') announce();
+  };
+  document.addEventListener('visibilitychange', onVisible);
   const urlTimer = setInterval(() => {
     if (currentPath !== location.pathname) schedule(100);
+    if (announcedPath !== location.pathname) announce();
   }, 800);
   const unsubscribe = storage.subscribe(() => {
     void capture(true);
@@ -144,12 +162,14 @@ function startCapture(adapter: AIPlatformAdapter): () => void {
   extension.runtime.onMessage.addListener(onMessage);
   // Discover persisted activation on reload. sync will never create a notebook.
   void capture(true);
+  announce();
   return () => {
     disposed = true;
     stopSourceHighlighter();
     historyCancelled = true;
     clearTimeout(timer);
     clearInterval(urlTimer);
+    document.removeEventListener('visibilitychange', onVisible);
     observer.disconnect();
     try {
       unsubscribe();

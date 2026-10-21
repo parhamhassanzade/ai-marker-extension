@@ -6,7 +6,7 @@ async function requireCapability(name: 'sourceHighlights' | 'knowledgeNotebook')
     Record<string, boolean> | undefined;
   if (!capabilities?.[name])
     throw new Error(
-      'AI Notebook needs an update reload. Reload AI Notebook on your browser’s extensions page, then reload this ChatGPT tab and try again.',
+      'AI Notebook needs an update reload. Reload AI Notebook on your browser’s extensions page, then reload the chat tab and try again.',
     );
 }
 async function request(command: Command): Promise<Database> {

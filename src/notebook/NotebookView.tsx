@@ -272,7 +272,7 @@ export function NotebookView({
             <span>
               {notebook.highlights.length
                 ? 'Try another word or remove a filter.'
-                : 'Select a sentence on ChatGPT or in the reading view to start collecting.'}
+                : 'Select a sentence on the chat page or in the reading view to start collecting.'}
             </span>
           </div>
         )}

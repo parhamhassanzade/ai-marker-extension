@@ -1,9 +1,8 @@
-import type { AIPlatformAdapter } from '../../types';
-import { snapshotOf } from '../../adapters';
-import { storage } from '../../storage/storage';
-import { messageContainers } from './extractor';
-function scrollContainer(): HTMLElement {
-  let node = messageContainers()[0]?.element.parentElement;
+import type { AIPlatformAdapter } from '../types';
+import { snapshotOf } from '../adapters';
+import { storage } from '../storage/storage';
+function scrollContainer(adapter: AIPlatformAdapter): HTMLElement {
+  let node = adapter.sourceMessages()[0]?.element.parentElement;
   while (node) {
     if (
       node.scrollHeight > node.clientHeight + 20 &&
@@ -18,7 +17,7 @@ export async function captureHistory(
   adapter: AIPlatformAdapter,
   cancelled: () => boolean,
 ): Promise<{ complete: boolean }> {
-  const root = scrollContainer();
+  const root = scrollContainer(adapter);
   const originalTop = root.scrollTop;
   const originalBehavior = root.style.scrollBehavior;
   root.style.scrollBehavior = 'auto';

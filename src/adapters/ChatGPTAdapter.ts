@@ -1,6 +1,14 @@
 import type { AIPlatformAdapter } from '../types';
+import { conversationIdOf } from '../platforms';
 import { isChatGPT } from '../content/chatgpt/detector';
-import { extractMessages, logExtraction } from '../content/chatgpt/extractor';
+import {
+  cleanMessageText,
+  contentOf,
+  extractMessages,
+  logExtraction,
+  messageContainers,
+  messageId,
+} from '../content/chatgpt/extractor';
 export class ChatGPTAdapter implements AIPlatformAdapter {
   readonly platform = 'ChatGPT' as const;
   private temporaryId = `temporary:${crypto.randomUUID()}`;
@@ -8,10 +16,20 @@ export class ChatGPTAdapter implements AIPlatformAdapter {
     return isChatGPT();
   }
   getConversationId() {
-    return location.pathname.match(/\/c\/([^/]+)/)?.[1] ?? this.temporaryId;
+    return conversationIdOf('ChatGPT', location.pathname) ?? this.temporaryId;
   }
   resetTemporaryId() {
     this.temporaryId = `temporary:${crypto.randomUUID()}`;
+  }
+  sourceMessages() {
+    return messageContainers().map(({ element, role, turn }, index) => ({
+      element: contentOf(element),
+      role,
+      id: messageId(element, role, turn, index),
+    }));
+  }
+  sourceText(element: HTMLElement) {
+    return cleanMessageText(element);
   }
   extractMessages() {
     const messages = extractMessages();

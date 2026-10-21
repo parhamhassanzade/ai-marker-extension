@@ -1,17 +1,37 @@
-import type { AIPlatformAdapter, Message } from '../types';
-// Contract for a future adapter. Intentionally disabled until extraction is verified.
+import type { AIPlatformAdapter } from '../types';
+import { conversationIdOf, platformOf } from '../platforms';
+import {
+  claudeMessages,
+  claudeMessageText,
+  extractClaudeMessages,
+} from '../content/claude/extractor';
 export class ClaudeAdapter implements AIPlatformAdapter {
   readonly platform = 'Claude' as const;
+  private temporaryId = `temporary:${crypto.randomUUID()}`;
   detectConversation() {
-    return false;
+    return platformOf(location.href) === 'Claude';
   }
-  extractMessages(): Message[] {
-    throw new Error('Claude capture is not available yet.');
+  getConversationId() {
+    return conversationIdOf('Claude', location.pathname) ?? this.temporaryId;
   }
-  extractTitle(): string {
-    throw new Error('Claude capture is not available yet.');
+  resetTemporaryId() {
+    this.temporaryId = `temporary:${crypto.randomUUID()}`;
   }
-  getConversationId(): string {
-    throw new Error('Claude capture is not available yet.');
+  sourceMessages() {
+    return claudeMessages();
+  }
+  sourceText(element: HTMLElement) {
+    return claudeMessageText(element);
+  }
+  extractMessages() {
+    return extractClaudeMessages();
+  }
+  extractTitle() {
+    const title = document.title.replace(/\s*[-–|]\s*Claude\s*$/i, '').trim();
+    return title && title !== 'Claude'
+      ? title
+      : this.extractMessages()
+          .find((m) => m.role === 'user')
+          ?.text.slice(0, 100) || 'Untitled conversation';
   }
 }

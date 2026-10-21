@@ -106,8 +106,8 @@ export function NotebookHome({
             <Star size={22} />
             <p>Keep the sentences that change how you think.</p>
             <span>
-              Highlight a passage on ChatGPT or while reading here. Your favorite ideas will appear
-              here.
+              Highlight a passage on the chat page or while reading here. Your favorite ideas will
+              appear here.
             </span>
           </div>
         )}

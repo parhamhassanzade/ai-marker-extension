@@ -1,6 +1,7 @@
 import type { AIPlatformAdapter, ConversationSnapshot } from '../types';
 import { ChatGPTAdapter } from './ChatGPTAdapter';
-export const adapters: AIPlatformAdapter[] = [new ChatGPTAdapter()];
+import { ClaudeAdapter } from './ClaudeAdapter';
+export const adapters: AIPlatformAdapter[] = [new ChatGPTAdapter(), new ClaudeAdapter()];
 export const detectAdapter = () => adapters.find((adapter) => adapter.detectConversation());
 export const snapshotOf = (adapter: AIPlatformAdapter): ConversationSnapshot => ({
   platform: adapter.platform,

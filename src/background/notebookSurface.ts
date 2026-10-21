@@ -77,7 +77,7 @@ export function configureNotebookSurface() {
     const source = tab;
     const windowId = source.windowId;
     if (windowId === undefined)
-      return Promise.reject(new Error('Open a ChatGPT tab and try again.'));
+      return Promise.reject(new Error('Open a ChatGPT or Claude tab and try again.'));
     const existing = opening.get(windowId);
     if (existing) return existing;
     const launch = () =>
