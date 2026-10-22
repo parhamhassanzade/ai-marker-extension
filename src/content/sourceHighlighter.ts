@@ -122,7 +122,17 @@ export function startSourceHighlighter(adapter: AIPlatformAdapter): () => void {
     clearTimeout(timer);
     timer = setTimeout(paint, 150);
   }
+  // Selection handling must never throw out of a page event: a failure hides the
+  // toolbar for this selection only, and the next selection tries again.
   function select(event?: Event) {
+    try {
+      inspectSelection(event);
+    } catch (error) {
+      console.warn('[AI Notebook] Selection could not be read', error);
+      toolbar.hide();
+    }
+  }
+  function inspectSelection(event?: Event) {
     if (event?.composedPath().includes(toolbar.host)) return;
     const selection = document.getSelection();
     if (!selection || selection.isCollapsed || selection.rangeCount !== 1) {
@@ -152,16 +162,15 @@ export function startSourceHighlighter(adapter: AIPlatformAdapter): () => void {
     const start = selected[0]!.canonical;
     const end = selected.at(-1)!.canonical + 1;
     if (end - start > 50_000) return;
-    const snapshot = snapshotOf(adapter);
+    // Reading the whole conversation is costly in long chats; do it only on save.
+    const conversationId = adapter.getConversationId();
     const id = container.id;
     toolbar.show(range.getBoundingClientRect(), {
       cancel: () => selection.removeAllRanges(),
       save: async (color, note) => {
-        if (
-          !range.startContainer.isConnected ||
-          adapter.getConversationId() !== snapshot.conversationId
-        )
+        if (!range.startContainer.isConnected || adapter.getConversationId() !== conversationId)
           throw new Error('The conversation changed. Select the passage again.');
+        const snapshot = snapshotOf(adapter);
         const highlight: SavedHighlight = {
           id: uuid(),
           platform: snapshot.platform,

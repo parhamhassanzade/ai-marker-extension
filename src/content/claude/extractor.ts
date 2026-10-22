@@ -1,8 +1,7 @@
 import type { Message, SourceMessage } from '../../types';
 import { isHidden } from '../chatgpt/detector';
 import { projectMessageText } from '../chatgpt/projection';
-import { captureContent } from '../model/capture';
-import { CONTENT_VERSION } from '../model/types';
+import { richContent } from '../model/capture';
 
 // claude.ai exposes no message IDs or role attributes beyond these containers.
 // Keep every Claude-specific selector here so live markup changes stay local.
@@ -33,9 +32,7 @@ export function extractClaudeMessages(): Message[] {
         id,
         role,
         text: projection.text,
-        ...(role === 'assistant'
-          ? { contentVersion: CONTENT_VERSION, content: captureContent(element, projection) }
-          : {}),
+        ...(role === 'assistant' ? richContent(element, projection) : {}),
       };
     })
     .filter((message) => message.text || message.content?.blocks.length);

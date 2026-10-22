@@ -162,6 +162,13 @@ export function transition(db: Database, command: Command): Database {
   } else {
     const notebook = next.notebooks.find((n) => n.id === command.id);
     if (!notebook) throw new Error('Notebook no longer exists.');
+    if (command.type === 'delete') {
+      // Images are removed with the record in writeDatabase's transaction.
+      next.notebooks = next.notebooks.filter((n) => n.id !== notebook.id);
+      const key = conversationKey(notebook);
+      if (next.activeByConversation[key] === notebook.id) delete next.activeByConversation[key];
+      return next;
+    }
     if (command.type === 'finish' || command.type === 'pause') {
       if (command.type === 'finish') notebook.finishedAt = new Date().toISOString();
       const key = conversationKey(notebook);
@@ -211,4 +218,23 @@ export function transition(db: Database, command: Command): Database {
     notebook.updatedAt = new Date().toISOString();
   }
   return next;
+}
+
+/**
+ * Add backup notebooks whose IDs are not already present. Imported notebooks are
+ * never active: capture resumes only when the user turns it on again.
+ */
+export function mergeImport(
+  db: Database,
+  incoming: Database,
+): { next: Database; imported: string[]; skipped: number } {
+  const next = structuredClone(db);
+  const existing = new Set(db.notebooks.map((n) => n.id));
+  const imported: string[] = [];
+  for (const notebook of incoming.notebooks) {
+    if (existing.has(notebook.id)) continue;
+    next.notebooks.push(structuredClone(notebook));
+    imported.push(notebook.id);
+  }
+  return { next, imported, skipped: incoming.notebooks.length - imported.length };
 }

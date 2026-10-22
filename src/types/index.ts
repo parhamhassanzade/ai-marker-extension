@@ -111,5 +111,6 @@ export type Command =
   | { type: 'finish'; id: string }
   | { type: 'clear'; id: string }
   | { type: 'rename'; id: string; title: string }
+  | { type: 'delete'; id: string }
   | { type: 'removeHighlight'; id: string; highlightId: string };
 export type Result = { ok: true; data: Database } | { ok: false; error: string };

@@ -51,6 +51,7 @@ export const storage = {
   finishNotebook: (id: string) => request({ type: 'finish', id }),
   clearHighlights: (id: string) => request({ type: 'clear', id }),
   renameNotebook: (id: string, title: string) => request({ type: 'rename', id, title }),
+  deleteNotebook: (id: string) => request({ type: 'delete', id }),
   removeHighlight: (id: string, highlightId: string) =>
     request({ type: 'removeHighlight', id, highlightId }),
   async getCurrentNotebook(snapshot: ConversationSnapshot) {

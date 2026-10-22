@@ -1,8 +1,7 @@
 import type { Message } from '../../types';
 import { MESSAGE_SELECTOR, TURN_SELECTOR, isHidden, conversationRoot } from './detector';
 import { projectMessageText } from './projection';
-import { captureContent } from '../model/capture';
-import { CONTENT_VERSION } from '../model/types';
+import { richContent } from '../model/capture';
 type Role = Message['role'];
 export interface MessageContainer {
   element: HTMLElement;
@@ -93,12 +92,7 @@ export function extractMessages(): Message[] {
         id: messageId(element, role, turn, index),
         role,
         text,
-        ...(role === 'assistant'
-          ? {
-              contentVersion: CONTENT_VERSION,
-              content: captureContent(contentOf(element), projection),
-            }
-          : {}),
+        ...(role === 'assistant' ? richContent(contentOf(element), projection) : {}),
         ...(orderMatch ? { order: Number(orderMatch[1]) } : {}),
         ...(timestamp && Number.isFinite(Date.parse(timestamp)) ? { timestamp } : {}),
       };

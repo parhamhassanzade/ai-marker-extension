@@ -13,6 +13,8 @@ import {
   type ContentBlock,
 } from '../src/content/model/types';
 import { isMessageContent } from '../src/content/model/validation';
+import { captureContent } from '../src/content/model/capture';
+import { projectMessageText } from '../src/content/chatgpt/projection';
 import { highlightSegments, resolveAnchor } from '../src/content/highlighter';
 import { isCommand } from '../src/storage/validation';
 import type { Highlight } from '../src/types';
@@ -135,13 +137,11 @@ describe('sanitized structured capture', () => {
       'x_i + y_i',
     ]);
     expect(math.map((item) => item.display)).toEqual([false, true, false]);
+    expect(inlines.filter((item) => item.type === 'image')).toEqual([
+      { type: 'image', index: 0, alt: 'not fetched' },
+    ]);
     expect(inlines.filter((item) => item.type === 'unsupported').map((item) => item.label)).toEqual(
-      [
-        '[image not captured]',
-        '[canvas not captured]',
-        '[attachment not captured]',
-        '[interactive content not captured]',
-      ],
+      ['[canvas not captured]', '[attachment not captured]', '[interactive content not captured]'],
     );
   });
   it('allows only HTTP, HTTPS and mailto links', () => {
@@ -159,21 +159,58 @@ describe('sanitized structured capture', () => {
     expect(safeLink('HTTPS://EXAMPLE.COM')).toBe('https://example.com/');
     expect(safeLink('mailto:user@example.com')).toBe('mailto:user@example.com');
   });
-  it('rejects over-limit formatting explicitly without mutating the page or truncating LaTeX', () => {
+  it('keeps over-limit messages as plain text without breaking the conversation or mutating the page', () => {
     document.body.innerHTML =
-      '<main><div data-message-author-role="assistant"><p>' +
+      '<main><div data-message-author-role="user"><p>Question</p></div>' +
+      '<div data-message-author-role="assistant"><p>' +
       '<span>'.repeat(40) +
       'Saved text' +
       '</span>'.repeat(40) +
-      '</p></div></main>';
+      '</p></div><div data-message-author-role="assistant"><p>Next answer</p></div></main>';
     const original = document.body.innerHTML;
-    expect(() => extractMessages()).toThrow('safe nesting or node limits');
+    // The budget is still enforced by the structured capture itself...
+    const deep = document.querySelectorAll<HTMLElement>('[data-message-author-role]')[1]!;
+    expect(() => captureContent(deep, projectMessageText(deep, true))).toThrow(
+      'safe nesting or node limits',
+    );
+    // ...but only that message loses its structure; extraction continues.
+    const messages = extractMessages();
+    expect(messages.map((m) => m.text)).toEqual(['Question', 'Saved text', 'Next answer']);
+    expect(messages[1]!.content).toBeUndefined();
+    expect(messages[1]!.contentVersion).toBeUndefined();
+    expect(messages[2]!.content).toBeDefined();
     expect(document.body.innerHTML).toBe(original);
     document.body.innerHTML =
-      '<main><div data-message-author-role="assistant"><span data-latex="' +
+      '<main><div data-message-author-role="assistant"><p>Formula:</p><span data-latex="' +
       'x'.repeat(100_001) +
       '"></span></div></main>';
-    expect(() => extractMessages()).toThrow('100,000 character capture limit');
+    const [formula] = extractMessages();
+    // No truncated LaTeX is ever stored; the message keeps its plain text.
+    expect(formula!.text).toBe('Formula:');
+    expect(formula!.content).toBeUndefined();
+  });
+  it('keeps a long syntax-highlighted code block capturable', () => {
+    const code = Array.from(
+      { length: 3000 },
+      (_, i) =>
+        `<span class="hljs-keyword">const</span> <span class="hljs-variable">v${i}</span> = <span class="hljs-number">${i}</span>;\n`,
+    ).join('');
+    document.body.innerHTML = `<main><div data-message-author-role="assistant"><p>Here:</p><pre><code class="language-js">${code}</code></pre></div><div data-message-author-role="user"><p>Thanks</p></div></main>`;
+    const messages = extractMessages();
+    expect(messages).toHaveLength(2);
+    expect(messages[0]!.text).toContain('const v2999 = 2999;');
+    expect(
+      isCommand({
+        type: 'sync',
+        snapshot: {
+          platform: 'ChatGPT',
+          conversationId: 'c',
+          title: 't',
+          website: 'https://chatgpt.com/c/c',
+          messages,
+        },
+      }),
+    ).toBe(true);
   });
 });
 
@@ -267,7 +304,7 @@ it('preserves pre-wrap newlines within a run and explicit BR structure', () => {
   expect(isMessageContent(message.content, message.text)).toBe(true);
 });
 
-it('retains unsupported-only and math-only answers without inventing canonical characters', () => {
+it('retains image-only and math-only answers without inventing canonical characters', () => {
   document.body.innerHTML =
     '<main><div data-message-author-role="assistant"><img alt="diagram"><span data-latex="x^2"></span></div></main>';
   const message = extractMessages()[0]!;
@@ -276,7 +313,10 @@ it('retains unsupported-only and math-only answers without inventing canonical c
   expect(isMessageContent(message.content, message.text)).toBe(true);
   expect(message.content!.blocks[0]).toMatchObject({
     type: 'paragraph',
-    children: [{ type: 'unsupported' }, { type: 'math', latex: 'x^2' }],
+    children: [
+      { type: 'image', index: 0, alt: 'diagram' },
+      { type: 'math', latex: 'x^2' },
+    ],
   });
 });
 

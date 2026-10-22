@@ -89,5 +89,10 @@ export function isCommand(value: unknown): value is Command {
     return isText(value.highlightId, 100) && isText(value.note, 5000);
   if (value.type === 'rename') return isText(value.title, 200);
   if (value.type === 'removeHighlight') return isText(value.highlightId, 100);
-  return value.type === 'finish' || value.type === 'pause' || value.type === 'clear';
+  return (
+    value.type === 'finish' ||
+    value.type === 'pause' ||
+    value.type === 'clear' ||
+    value.type === 'delete'
+  );
 }

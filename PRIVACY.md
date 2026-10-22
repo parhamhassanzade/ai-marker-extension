@@ -1,6 +1,6 @@
 # AI Notebook – Privacy Policy
 
-Last updated: 21 October 2026
+Last updated: 22 October 2026
 
 AI Notebook is a browser extension that saves ChatGPT and Claude conversations you choose as study notebooks.
 
@@ -8,6 +8,7 @@ AI Notebook is a browser extension that saves ChatGPT and Claude conversations y
 
 - The text of ChatGPT conversations on chatgpt.com and chat.openai.com, and of Claude conversations on claude.ai, to capture or update notebooks and save highlights you choose. Active notebooks can capture new replies automatically until you pause updates or finish the notebook.
 - Access to claude.ai is optional. The extension reads Claude conversations only after you click **Allow claude.ai** and grant access in your browser. You can remove that access at any time in your browser's extension settings.
+- Images in conversations you save as notebooks, if **Save images** is on (the default). Generated and uploaded images are downloaded once, from the same address the chat page uses, and stored on your device. Some ChatGPT images are served from `oaiusercontent.com`. Access to that site is optional and is requested when you choose to save images. Images from web-search results are not downloaded unless you turn on **Include web-search images**, and even then only if the image's site allows it. Downloading the image itself is the only network request this feature makes.
 - The highlights, notes, tags, bookmarks and settings you create.
 
 ## Where your data is stored
@@ -22,7 +23,7 @@ All data is stored locally in your browser on your own device. AI Notebook has n
 
 ## Deleting your data
 
-You can remove highlights inside the extension. Uninstalling the extension deletes its locally stored browser data. Exported PDFs remain wherever you saved them and must be deleted separately.
+You can remove highlights, single images, or whole notebooks inside the extension; deleting a notebook also deletes its saved images. Uninstalling the extension deletes its locally stored browser data. Exported PDFs, Markdown files, and backups remain wherever you saved them and must be deleted separately.
 
 ## Donations
 

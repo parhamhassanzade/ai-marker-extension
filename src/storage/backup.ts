@@ -55,7 +55,7 @@ function isNotebook(value: unknown): value is Notebook {
     )
   );
 }
-function isDatabase(value: unknown): value is Database {
+export function isDatabase(value: unknown): value is Database {
   if (
     !record(value) ||
     value.version !== 1 ||

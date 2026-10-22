@@ -34,6 +34,14 @@ import {
 } from './connection';
 import { NotebookView } from './NotebookView';
 import { ClaudeAccess, useClaudeAccess } from './ClaudeAccess';
+import {
+  NotebookImagesContext,
+  formatBytes,
+  imageStorageBytes,
+  useNotebookImageRecords,
+} from './NotebookImages';
+import { ImagePrompt, ImageSettingsPanel, useImageSettings } from './ImageSettings';
+import { BackupTools } from './BackupTools';
 import { platformOf } from '../platforms';
 import { AboutSupport, ExportSupport, MainSupport, FeedbackLink } from './Support';
 import {
@@ -60,6 +68,9 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [clear, setClear] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [includeImages, setIncludeImages] = useState(true);
+  const imageSettings = useImageSettings();
   const [captureNotice, setCaptureNotice] = useState('');
   const [scanning, setScanning] = useState(false);
   const [supportPreference, setSupportPreference] = useState<SupportState>();
@@ -198,9 +209,13 @@ export default function App() {
     (key ? db?.notebooks.filter((n) => conversationKey(n) === key).at(-1) : db?.notebooks.at(-1));
   const collecting =
     !!notebook && db?.activeByConversation[conversationKey(notebook)] === notebook.id;
+  const images = useNotebookImageRecords(notebook?.id);
+  const visibleImages = images.records.filter((r) => r.status !== 'removed');
+  const savedImages = visibleImages.filter((r) => r.status === 'saved');
   useEffect(() => {
     setTitle(notebook?.title ?? '');
     setClear(false);
+    setConfirmDelete(false);
     setExportResult('');
   }, [notebook?.id, notebook?.title]);
   async function act(fn: () => Promise<Database | void>) {
@@ -223,6 +238,28 @@ export default function App() {
       { ok: boolean; error?: string }
     >(tabId.current, { type: 'refreshConversation' });
     if (!result?.ok) throw new Error(result?.error || 'Could not refresh the conversation.');
+  }
+  /** Capture images for this notebook from its open source chat. */
+  async function captureImages(target?: { messageId: string; index: number }) {
+    if (!notebook) return;
+    if (!tabId.current || !context || conversationKey(context) !== conversationKey(notebook))
+      throw new Error('Open this notebook’s source chat in a tab, then try again.');
+    if (imageSettings && !imageSettings.saveImages)
+      throw new Error('Saving images is turned off in Image settings.');
+    await ensureContentScript(tabId.current);
+    const result = await extension.tabs.sendMessage<
+      unknown,
+      { ok: boolean; saved?: number; failed?: number; placeholders?: number; error?: string }
+    >(tabId.current, { type: 'captureImages', notebookId: notebook.id, ...target });
+    if (!result?.ok) throw new Error(result?.error || 'Images could not be captured.');
+    await images.reload();
+    setCaptureNotice(
+      target
+        ? result.saved
+          ? 'Image saved.'
+          : 'The image still couldn’t be saved. Scroll to it in the chat so it loads, then retry.'
+        : `Images: ${result.saved ?? 0} saved, ${result.failed ?? 0} couldn’t be saved, ${result.placeholders ?? 0} web placeholders.`,
+    );
   }
   async function activate() {
     const { tabId: id, snapshot: detected } = await currentConversation();
@@ -360,6 +397,9 @@ export default function App() {
           </select>
         </label>
       )}
+      {imageSettings && !imageSettings.prompted && !!db?.notebooks.length && (
+        <ImagePrompt settings={imageSettings} />
+      )}
       {connectionError && sourceIsClaude && claude.granted === false ? (
         <div className="connection-notice" role="status">
           Allow AI Notebook on claude.ai to use this conversation.
@@ -492,6 +532,8 @@ export default function App() {
                   {notebook.platform} · {chaptersOf(notebook.messages).length} chapters ·{' '}
                   {notebook.highlights.length} saved{' '}
                   {notebook.highlights.length === 1 ? 'idea' : 'ideas'}
+                  {!!visibleImages.length &&
+                    ` · ${visibleImages.length} ${visibleImages.length === 1 ? 'image' : 'images'} (${formatBytes(imageStorageBytes(images.records))})`}
                 </p>
                 <a className="source-link" href={notebook.website} target="_blank" rel="noreferrer">
                   Open source conversation <ArrowUpRight size={13} />
@@ -501,14 +543,32 @@ export default function App() {
                   here.
                 </p>
               </section>
-              <NotebookView
-                notebook={notebook}
-                busy={busy}
-                onChange={setDb}
-                onAction={(fn) => {
-                  void act(fn);
+              <NotebookImagesContext.Provider
+                value={{
+                  records: images.records,
+                  retry: (messageId, index) => void act(() => captureImages({ messageId, index })),
+                  remove: (messageId, index) =>
+                    void act(async () => {
+                      const result = await extension.runtime.sendMessage({
+                        type: 'removeImage',
+                        notebookId: notebook.id,
+                        messageId,
+                        index,
+                      });
+                      if (!result?.ok) throw new Error(result?.error || 'Image was not removed.');
+                      await images.reload();
+                    }),
                 }}
-              />
+              >
+                <NotebookView
+                  notebook={notebook}
+                  busy={busy}
+                  onChange={setDb}
+                  onAction={(fn) => {
+                    void act(fn);
+                  }}
+                />
+              </NotebookImagesContext.Provider>
               <div className="document-actions">
                 <button
                   className="secondary-button save-pdf-button"
@@ -524,7 +584,7 @@ export default function App() {
                       if (!latest) throw new Error('Notebook no longer exists.');
                       const { exportNotebookPdf } = await import('../pdf/notebookExporter');
                       await exportWithSupport(
-                        () => exportNotebookPdf(latest),
+                        () => exportNotebookPdf(latest, { includeImages }),
                         () => support.recordExport(latest.id),
                         updateSupportPreference,
                       );
@@ -550,6 +610,29 @@ export default function App() {
                   Finish
                 </button>
                 <button
+                  className="secondary-button"
+                  disabled={busy}
+                  onClick={() => {
+                    void act(async () => {
+                      const { exportMarkdown } = await import('./downloads');
+                      await exportMarkdown(notebook);
+                      setExportResult('Markdown exported.');
+                    });
+                  }}
+                >
+                  Export Markdown
+                </button>
+                <button
+                  className="secondary-button"
+                  disabled={
+                    busy || !context || conversationKey(context) !== conversationKey(notebook)
+                  }
+                  title="Fetch images for messages already in this notebook"
+                  onClick={() => void act(() => captureImages())}
+                >
+                  Capture images
+                </button>
+                <button
                   className="icon-button"
                   aria-label="Clear highlights"
                   disabled={busy || !notebook.highlights.length}
@@ -564,6 +647,48 @@ export default function App() {
                   {supportPreference && (
                     <ExportSupport state={supportPreference} onChange={updateSupportPreference} />
                   )}
+                </div>
+              )}
+              {!!savedImages.length && (
+                <label className="include-images">
+                  <input
+                    type="checkbox"
+                    checked={includeImages}
+                    onChange={(e) => setIncludeImages(e.target.checked)}
+                  />{' '}
+                  Include images in PDF
+                </label>
+              )}
+              <button
+                className="text-button danger delete-notebook"
+                disabled={busy}
+                onClick={() => setConfirmDelete(true)}
+              >
+                Delete notebook
+              </button>
+              {confirmDelete && (
+                <div className="confirm" role="alert">
+                  <p>
+                    Delete “{notebook.title}” with its highlights, notes, and saved images? This
+                    can’t be undone. Export a backup first if you might need it.
+                  </p>
+                  <button className="text-button" onClick={() => setConfirmDelete(false)}>
+                    Keep notebook
+                  </button>
+                  <button
+                    className="text-button danger"
+                    disabled={busy}
+                    onClick={() => {
+                      void act(async () => {
+                        const result = await storage.deleteNotebook(notebook.id);
+                        setConfirmDelete(false);
+                        setSelected('');
+                        return result;
+                      });
+                    }}
+                  >
+                    Delete
+                  </button>
                 </div>
               )}
               {clear && (
@@ -621,6 +746,8 @@ export default function App() {
             <Plus size={15} />
             New notebook for this conversation
           </button>
+          {imageSettings && <ImageSettingsPanel settings={imageSettings} />}
+          {db && <BackupTools db={db} onImported={setDb} />}
           {claude.granted === false && (
             <ClaudeAccess request={claude.request} onGranted={() => void refreshContext()} />
           )}

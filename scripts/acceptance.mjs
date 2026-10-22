@@ -14,10 +14,52 @@ const context = await chromium.launchPersistentContext(profile, {
 try {
   const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
   const extensionId = new URL(worker.url()).hostname;
-  const fixture = await readFile('tests/fixtures/chatgpt-semantic.html', 'utf8');
-  await context.route('https://chatgpt.com/**', (route) =>
-    route.fulfill({ body: fixture, contentType: 'text/html; charset=utf-8' }),
+  // Ten distinct photo-like images (gradient plus noise), served as ChatGPT
+  // generated-image URLs at the end of the second answer.
+  const generator = await context.newPage();
+  const photos = await generator.evaluate(async () => {
+    const result = [];
+    for (let i = 0; i < 10; i++) {
+      const canvas = new OffscreenCanvas(1024, 1024);
+      const context = canvas.getContext('2d');
+      const gradient = context.createLinearGradient(0, 0, 1024, 1024);
+      gradient.addColorStop(0, `hsl(${i * 36}, 55%, 55%)`);
+      gradient.addColorStop(1, `hsl(${i * 36 + 120}, 45%, 35%)`);
+      context.fillStyle = gradient;
+      context.fillRect(0, 0, 1024, 1024);
+      const pixels = context.getImageData(0, 0, 1024, 1024);
+      for (let p = 0; p < pixels.data.length; p += 4) {
+        const noise = (Math.random() - 0.5) * 40;
+        pixels.data[p] += noise;
+        pixels.data[p + 1] += noise;
+        pixels.data[p + 2] += noise;
+      }
+      context.putImageData(pixels, 0, 0);
+      const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.9 });
+      result.push(Array.from(new Uint8Array(await blob.arrayBuffer())));
+    }
+    return result;
+  });
+  await generator.close();
+  const imageCount = photos.length;
+  const fixture = (await readFile('tests/fixtures/chatgpt-semantic.html', 'utf8')).replace(
+    '<p>The labels provide correct target answers during training.</p>',
+    `$&${photos
+      .map(
+        (_, i) =>
+          `<img src="https://chatgpt.com/backend-api/estuary/content?id=file-acc${i}&amp;sig=x" alt="Acceptance diagram ${i + 1}" width="1024" height="1024">`,
+      )
+      .join('')}`,
   );
+  await context.route('https://chatgpt.com/**', (route) => {
+    const id = new URL(route.request().url()).searchParams.get('id');
+    if (id?.startsWith('file-acc'))
+      return route.fulfill({
+        body: Buffer.from(photos[Number(id.slice(8))]),
+        contentType: 'image/jpeg',
+      });
+    return route.fulfill({ body: fixture, contentType: 'text/html; charset=utf-8' });
+  });
   const chat = await context.newPage();
   await chat.goto('https://chatgpt.com/c/acceptance');
   const panel = await context.newPage();
@@ -43,6 +85,18 @@ try {
   await panel.getByRole('button', { name: 'Read', exact: true }).click();
   await expect(panel.locator('.capture-notice')).toContainText('4 messages imported');
   await expect(panel.locator('[data-notebook-message-id]')).toHaveCount(4);
+  // Images are fetched in the chat page, re-encoded, and stored by the worker.
+  await expect(panel.locator('[data-notebook-message-id="a2"] figure.message-image')).toHaveCount(
+    imageCount,
+    { timeout: 20000 },
+  );
+  await panel
+    .locator('[data-notebook-message-id="a2"] figure.message-image')
+    .first()
+    .scrollIntoViewIfNeeded();
+  await expect(
+    panel.locator('[data-notebook-message-id="a2"] figure.message-image img').first(),
+  ).toHaveAttribute('src', /^blob:/);
   const notebook = await panel.evaluate(async () => {
     const result = await chrome.runtime.sendMessage({ type: 'list' });
     return result.data.notebooks[0];
@@ -74,10 +128,27 @@ try {
       previous = position;
     }
     expect(result.text).not.toMatch(/Copy message|Rate response|Regenerate|Navigation decoy/);
+    const raw = await readFile(file, 'latin1');
+    result.images = raw.match(/\/Subtype \/Image/g)?.length ?? 0;
+    result.bytes = Buffer.byteLength(raw, 'latin1');
     return result;
   }
   await mkdir('artifacts', { recursive: true });
   const plain = await exportAndVerify('artifacts/acceptance-no-highlights.pdf');
+  expect(plain.images, 'PDF should embed every captured image').toBe(imageCount);
+  for (let i = 1; i <= imageCount; i++)
+    expect(plain.text.indexOf(`Acceptance diagram ${i}`)).toBeGreaterThan(
+      plain.text.indexOf(expected[3]),
+    );
+  await panel.getByLabel('Include images in PDF').uncheck();
+  const textOnly = await exportAndVerify('artifacts/acceptance-text-only.pdf');
+  expect(textOnly.images).toBe(0);
+  await panel.getByLabel('Include images in PDF').check();
+  console.log('PDF size', {
+    images: imageCount,
+    withoutImages: textOnly.bytes,
+    withImages: plain.bytes,
+  });
   await panel.locator('[data-notebook-message-id="a2"]').scrollIntoViewIfNeeded();
   await panel.evaluate(async () => {
     await new Promise(requestAnimationFrame);
@@ -170,6 +241,7 @@ try {
       {
         title: notebook.title,
         messageCount: 4,
+        pdfSize: { images: imageCount, withoutImages: textOnly.bytes, withImages: plain.bytes },
         unannotated: {
           file: 'acceptance-no-highlights.pdf',
           pages: plain.pages,
@@ -188,7 +260,7 @@ try {
     ) + '\n',
   );
   console.log(
-    'Acceptance passed: all four full messages appear in order in BOTH downloaded PDFs; annotation and note appear under the second answer. Existing-tab reconnection also passed.',
+    `Acceptance passed: all four full messages appear in order in BOTH downloaded PDFs; annotation and note appear under the second answer; ${imageCount} captured images appear in the reader and are embedded in the PDF. Existing-tab reconnection also passed.`,
   );
 } finally {
   await context.close();

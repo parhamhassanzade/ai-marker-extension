@@ -82,6 +82,14 @@ export function isMessageContent(value: unknown, canonical: string): value is Me
     if (value.type === 'text') return text(value);
     if (++count > 20_000) return false;
     if (value.type === 'break') return keys(value, ['type']);
+    if (value.type === 'image')
+      return (
+        keys(value, ['type', 'index', 'alt']) &&
+        integer(value.index) &&
+        Number(value.index) >= 0 &&
+        Number(value.index) < 50 &&
+        string(value.alt, 1000)
+      );
     if (value.type === 'math')
       return (
         keys(value, ['type', 'latex', 'display', 'children']) &&

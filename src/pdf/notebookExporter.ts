@@ -6,6 +6,16 @@ import { overviewOf } from '../knowledge/overview';
 import { chaptersOf, chapterTitle } from '../notebook/chapters';
 import { layoutHighlightedText, PDF_HIGHLIGHT_COLORS } from './textLayout';
 import type { Highlight, Notebook } from '../types';
+import type { ImageRecord } from '../images/types';
+import { getImageBlob, listImages } from '../storage/indexedDB';
+/** An image record with its bytes, ready for jsPDF. */
+export interface PdfImage extends Pick<
+  ImageRecord,
+  'messageId' | 'index' | 'offset' | 'alt' | 'status' | 'pageUrl' | 'width' | 'height' | 'hash'
+> {
+  data?: Uint8Array;
+  format?: 'JPEG' | 'PNG';
+}
 const accents = { yellow: [170, 126, 29], green: [44, 128, 81], red: [181, 66, 64] } as const;
 const fontPromises = new Map<string, Promise<string>>();
 async function loadFont(name: 'NotoSans' | 'NotoNaskhArabic') {
@@ -32,7 +42,12 @@ async function loadFont(name: 'NotoSans' | 'NotoNaskhArabic') {
   }
   return pending;
 }
-export function createNotebookPdf(notebook: Notebook, font?: string, arabicFont?: string): jsPDF {
+export function createNotebookPdf(
+  notebook: Notebook,
+  font?: string,
+  arabicFont?: string,
+  images: PdfImage[] = [],
+): jsPDF {
   if (!notebook.messages.some((message) => message.text.trim()))
     throw new Error(
       'This notebook has no conversation messages. Activate Notebook Mode and import the conversation before exporting.',
@@ -159,6 +174,72 @@ export function createNotebookPdf(notebook: Notebook, font?: string, arabicFont?
     }
     y += space;
   }
+  const imageCaptionSize = 8;
+  function image(item: PdfImage) {
+    if (!item.data || !item.format || !item.width || !item.height) {
+      const label =
+        item.status === 'placeholder' ? 'Web image not saved' : 'Image couldn’t be saved';
+      line(
+        `[${label}${item.alt ? `: ${item.alt}` : ''}]${item.pageUrl ? ` ${item.pageUrl}` : ''}`,
+        9,
+        [111, 117, 104],
+        4,
+      );
+      return;
+    }
+    const captionHeight = item.alt ? 8 : 0;
+    // Fit the content width, keep the aspect ratio, and never exceed one page.
+    const maxHeight = bottom - 23 - captionHeight - 2;
+    let w = width;
+    let h = (w * item.height) / item.width;
+    if (h > maxHeight) {
+      h = maxHeight;
+      w = (h * item.width) / item.height;
+    }
+    // Never split an image: move it to the next page when it does not fit.
+    if (y + h + captionHeight > bottom) {
+      pdf.addPage();
+      y = 23;
+    }
+    pdf.addImage(item.data, item.format, left + (width - w) / 2, y, w, h, item.hash, 'NONE');
+    y += h + 2;
+    if (item.alt) {
+      y += 3;
+      line(item.alt, imageCaptionSize, [111, 117, 104], 2);
+    }
+    y += 4;
+  }
+  /** Message text split at image offsets; highlights stay anchored to the full text. */
+  function messageWithImages(text: string, highlights: Highlight[], media: PdfImage[]) {
+    const resolved = highlights
+      .map((h) => ({ highlight: h, start: resolveAnchor(text, h) }))
+      .filter((h) => h.start !== undefined);
+    const piece = (from: number, to: number, space: number) => {
+      while (from < to && text[from] === '\n') from++;
+      while (to > from && text[to - 1] === '\n') to--;
+      if (!text.slice(from, to).trim()) return;
+      const local: Highlight[] = [];
+      for (const { highlight: h, start: position } of resolved) {
+        const start = Math.max(from, position!);
+        const end = Math.min(to, position! + h.text.length);
+        if (end > start)
+          local.push({
+            ...h,
+            text: text.slice(start, end),
+            anchor: { start: start - from, end: end - from, prefix: '', suffix: '' },
+          });
+      }
+      line(text.slice(from, to), 10, undefined, space, local);
+    };
+    let cursor = 0;
+    for (const item of media) {
+      const offset = Math.min(Math.max(item.offset, cursor), text.length);
+      piece(cursor, offset, 4);
+      image(item);
+      cursor = offset;
+    }
+    piece(cursor, text.length, 10);
+  }
   function keepSection(required = 20) {
     if (y + required > bottom) {
       pdf.addPage();
@@ -267,7 +348,11 @@ export function createNotebookPdf(notebook: Notebook, font?: string, arabicFont?
       }
       line(message.role === 'user' ? 'Your question' : 'AI response', 10, [87, 107, 75], 4);
       const highlights = notebook.highlights.filter((h) => h.messageId === message.id);
-      line(message.text, 10, undefined, 10, highlights);
+      const media = images
+        .filter((item) => item.messageId === message.id && item.status !== 'removed')
+        .sort((a, b) => a.offset - b.offset || a.index - b.index);
+      if (media.length) messageWithImages(message.text, highlights, media);
+      else line(message.text, 10, undefined, 10, highlights);
     }
   }
   if (notebook.highlights.length) {
@@ -343,7 +428,27 @@ export function createNotebookPdf(notebook: Notebook, font?: string, arabicFont?
   }
   return pdf;
 }
-export async function exportNotebookPdf(notebook: Notebook) {
+/** Read a notebook's images and bytes from IndexedDB for embedding. */
+export async function loadPdfImages(notebookId: string): Promise<PdfImage[]> {
+  const records = (await listImages(notebookId)).filter((r) => r.status !== 'removed');
+  return Promise.all(
+    records.map(async (record): Promise<PdfImage> => {
+      const blob =
+        record.status === 'saved' && record.hash ? await getImageBlob(record.hash) : undefined;
+      if (!blob) return { ...record, status: record.status === 'saved' ? 'failed' : record.status };
+      return {
+        ...record,
+        data: new Uint8Array(await blob.blob.arrayBuffer()),
+        format: blob.mime === 'image/png' ? 'PNG' : 'JPEG',
+      };
+    }),
+  );
+}
+export async function exportNotebookPdf(
+  notebook: Notebook,
+  options: { includeImages?: boolean } = {},
+) {
+  const images = options.includeImages === false ? [] : await loadPdfImages(notebook.id);
   const arabic = hasArabic(
     [
       notebook.title,
@@ -352,13 +457,14 @@ export async function exportNotebookPdf(notebook: Notebook) {
       ...notebook.highlights.flatMap((h) => h.tags ?? []),
       ...notebook.messages.map((m) => m.text),
       ...notebook.highlights.flatMap((h) => [h.text, h.note]),
+      ...images.map((item) => item.alt),
     ].join('\n'),
   );
   const [font, arabicFont] = await Promise.all([
     loadFont('NotoSans'),
     arabic ? loadFont('NotoNaskhArabic') : Promise.resolve(undefined),
   ]);
-  const pdf = createNotebookPdf(notebook, font, arabicFont);
+  const pdf = createNotebookPdf(notebook, font, arabicFont, images);
   const safeTitle =
     notebook.title
       .replace(/[^\p{L}\p{N} _-]/gu, '')

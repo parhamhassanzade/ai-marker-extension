@@ -27,7 +27,7 @@ try {
   const stored = () =>
     worker.evaluate(async () => {
       const db = await new Promise((resolve, reject) => {
-        const request = indexedDB.open('ai-notebook', 1);
+        const request = indexedDB.open('ai-notebook');
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
       });

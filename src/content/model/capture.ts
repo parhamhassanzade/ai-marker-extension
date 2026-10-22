@@ -1,4 +1,7 @@
 import { UI_SELECTOR, isHidden } from '../chatgpt/detector';
+import { messageImages } from '../images/detect';
+import { isMessageContent } from './validation';
+import { CONTENT_VERSION } from './types';
 import type { MessageProjection } from '../chatgpt/projection';
 import {
   contentTextRuns,
@@ -21,6 +24,7 @@ export function captureContent(root: HTMLElement, projection: MessageProjection)
     existing.push(span);
     spans.set(span.node, existing);
   }
+  const images = messageImages(root);
   let nodes = 0;
   function guard(depth: number) {
     if (depth > 32 || ++nodes > 20_000)
@@ -66,6 +70,16 @@ export function captureContent(root: HTMLElement, projection: MessageProjection)
           element.getAttribute('display') === 'block',
         children: rawRuns(element),
       };
+    }
+    if (element.matches('img, picture')) {
+      const image = element instanceof HTMLImageElement ? element : element.querySelector('img');
+      const index = image ? images.indexOf(image) : -1;
+      if (index >= 0)
+        return {
+          type: 'image',
+          index,
+          alt: (image!.getAttribute('alt') ?? '').trim().slice(0, 1000),
+        };
     }
     if (element.matches(unsupportedSelector)) {
       const kind = element.matches('img,picture')
@@ -205,4 +219,25 @@ export function captureContent(root: HTMLElement, projection: MessageProjection)
   if (cursor < projection.text.length)
     content.gaps.push({ start: cursor, end: projection.text.length });
   return content;
+}
+
+/**
+ * Structured content for one message, or nothing. A message that exceeds the
+ * model budgets (e.g. a long syntax-highlighted code block with tens of
+ * thousands of spans) falls back to plain text alone, so one large answer can
+ * never break extraction, highlighting, or the worker's validation of the whole
+ * conversation. message.text is unaffected either way.
+ */
+export function richContent(
+  root: HTMLElement,
+  projection: MessageProjection,
+): { contentVersion?: typeof CONTENT_VERSION; content?: MessageContent } {
+  try {
+    const content = captureContent(root, projection);
+    if (isMessageContent(content, projection.text))
+      return { contentVersion: CONTENT_VERSION, content };
+  } catch {
+    /* Over budget: keep the plain-text message. */
+  }
+  return {};
 }

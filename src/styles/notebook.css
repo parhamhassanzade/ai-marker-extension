@@ -1168,3 +1168,133 @@ button {
   padding: 0;
   margin: 4px 0 0;
 }
+
+/* Images sit inside selectable message text: labels come from attr(), never DOM text. */
+.message-image {
+  position: relative;
+  display: block;
+  margin: 12px 0;
+  white-space: normal;
+}
+.message-image .image-open {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+  max-width: 100%;
+}
+.message-image img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+.message-image[data-caption]::after {
+  content: attr(data-caption);
+  display: block;
+  margin-top: 5px;
+  font:
+    11px/1.5 system-ui,
+    sans-serif;
+  color: var(--muted);
+}
+.message-image .image-remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: var(--surface);
+  opacity: 0;
+}
+.message-image:hover .image-remove,
+.message-image .image-remove:focus-visible {
+  opacity: 1;
+}
+.image-failed,
+.image-placeholder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  font:
+    12px/1.5 system-ui,
+    sans-serif;
+  color: var(--muted);
+}
+.image-failed::before,
+.image-placeholder::before {
+  content: attr(data-label);
+  order: 1;
+}
+.image-failed button,
+.image-placeholder a {
+  order: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.image-failed button::after,
+.image-placeholder a::after {
+  content: attr(data-label);
+}
+.image-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: #000000d9;
+  cursor: zoom-out;
+}
+.image-viewer img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.image-viewer button {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  color: #fff;
+}
+.image-prompt {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.image-prompt h2 {
+  font-size: 13px;
+  margin: 0 0 6px;
+}
+.image-prompt label {
+  display: block;
+  margin: 8px 0;
+}
+.include-images {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin: 8px 0;
+}
+.delete-notebook {
+  margin-top: 6px;
+}
+.file-button {
+  display: inline-block;
+  margin-left: 8px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.file-button input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}

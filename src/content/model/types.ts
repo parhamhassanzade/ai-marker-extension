@@ -23,7 +23,10 @@ export type ContentInline =
   | ContentText
   | { type: 'break' }
   | { type: 'math'; latex: string; display: boolean; children: ContentText[] }
-  | { type: 'unsupported'; label: string; children: ContentText[] };
+  | { type: 'unsupported'; label: string; children: ContentText[] }
+  // An image adds no canonical characters. Its bytes live in the image store,
+  // keyed by notebook, message, and this index.
+  | { type: 'image'; index: number; alt: string };
 export type ContentBlock =
   | { type: 'paragraph'; children: ContentInline[] }
   | { type: 'heading'; level: 1 | 2 | 3 | 4 | 5 | 6; children: ContentInline[] }
@@ -61,7 +64,7 @@ export function contentTextRuns(content: MessageContent): ContentText[] {
   const inline = (items: ContentInline[]) => {
     for (const item of items)
       if (item.type === 'text') runs.push(item);
-      else if (item.type !== 'break') runs.push(...item.children);
+      else if (item.type !== 'break' && item.type !== 'image') runs.push(...item.children);
   };
   const blocks = (items: ContentBlock[]) => {
     for (const item of items) {

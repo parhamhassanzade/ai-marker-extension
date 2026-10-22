@@ -6,6 +6,7 @@ import { captureHistory } from './history';
 import type { AIPlatformAdapter } from '../types';
 import { conversationIdOf } from '../platforms';
 import { SOURCE_HELLO } from '../browser/sourceTabs';
+import { createImageScanner } from './images/scanner';
 function startCapture(adapter: AIPlatformAdapter): () => void {
   const stopSourceHighlighter = startSourceHighlighter(adapter);
   let currentPath = location.pathname;
@@ -20,6 +21,14 @@ function startCapture(adapter: AIPlatformAdapter): () => void {
   let historyRunning = false;
   let disposed = false;
   let lastCaptureError: string | undefined;
+  const images = createImageScanner(adapter);
+  let imageTimer: ReturnType<typeof setTimeout> | undefined;
+  function scheduleImages(delay = 800) {
+    clearTimeout(imageTimer);
+    imageTimer = setTimeout(() => {
+      if (!disposed && enabled) void images.scan().catch(() => undefined);
+    }, delay);
+  }
   function schedule(delay = 500) {
     clearTimeout(timer);
     timer = setTimeout(() => {
@@ -54,6 +63,8 @@ function startCapture(adapter: AIPlatformAdapter): () => void {
         const db = await storage.syncConversation(snapshot, previousConversationId);
         enabled = !!db.activeByConversation[`${snapshot.platform}:${snapshot.conversationId}`];
         lastSignature = signature;
+        // Signed image links expire, so fetch soon after the turn is captured.
+        if (enabled) scheduleImages();
         previousConversationId = undefined;
         lastCaptureError = undefined;
       }
@@ -79,7 +90,14 @@ function startCapture(adapter: AIPlatformAdapter): () => void {
     childList: true,
     subtree: true,
     characterData: true,
+    // Lazy and progressively generated images swap their source in place.
+    attributes: true,
+    attributeFilter: ['src', 'srcset'],
   });
+  const onImageLoad = (event: Event) => {
+    if (enabled && event.target instanceof HTMLImageElement) scheduleImages();
+  };
+  document.addEventListener('load', onImageLoad, true);
   // Register this tab with the worker so a notebook tab can find it without
   // relying on side-panel context or URL-pattern tab queries.
   let announcedPath = '';
@@ -133,7 +151,10 @@ function startCapture(adapter: AIPlatformAdapter): () => void {
       historyCancelled = false;
       historyRunning = true;
       void captureHistory(adapter, () => historyCancelled || disposed)
-        .then((result) => respond({ ok: true, ...result }))
+        .then((result) => {
+          scheduleImages(0);
+          respond({ ok: true, ...result });
+        })
         .catch((error) =>
           respond({
             ok: false,
@@ -143,6 +164,28 @@ function startCapture(adapter: AIPlatformAdapter): () => void {
         .finally(() => {
           historyRunning = false;
         });
+      return true;
+    }
+    if (message.type === 'captureImages') {
+      const value = message as { notebookId?: unknown; messageId?: unknown; index?: unknown };
+      const only =
+        typeof value.messageId === 'string' && Number.isSafeInteger(value.index)
+          ? { messageId: value.messageId, index: Number(value.index) }
+          : undefined;
+      void images
+        .scan({
+          notebookId: typeof value.notebookId === 'string' ? value.notebookId : undefined,
+          force: true,
+          only,
+        })
+        .then(
+          (summary) => respond({ ok: true, ...summary }),
+          (error) =>
+            respond({
+              ok: false,
+              error: error instanceof Error ? error.message : 'Images could not be captured.',
+            }),
+        );
       return true;
     }
     if (message.type === 'context') {
@@ -169,6 +212,8 @@ function startCapture(adapter: AIPlatformAdapter): () => void {
     historyCancelled = true;
     clearTimeout(timer);
     clearInterval(urlTimer);
+    clearTimeout(imageTimer);
+    document.removeEventListener('load', onImageLoad, true);
     document.removeEventListener('visibilitychange', onVisible);
     observer.disconnect();
     try {

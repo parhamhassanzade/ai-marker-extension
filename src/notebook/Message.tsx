@@ -2,6 +2,7 @@ import { MessageCircle, Sparkles, Star } from 'lucide-react';
 import type { Message as ConversationMessage, Highlight } from '../types';
 import { HighlightText } from './Highlight';
 import { AnnotationCard, type AnnotationUpdate } from './AnnotationCard';
+import { ImageFigure, useImages } from './NotebookImages';
 export function Message({
   message,
   highlights,
@@ -16,6 +17,14 @@ export function Message({
   onRemove(id: string): void;
 }) {
   const user = message.role === 'user';
+  const { records } = useImages();
+  const inserts = records
+    .filter((record) => record.messageId === message.id && record.status !== 'removed')
+    .map((record) => ({
+      offset: record.offset,
+      key: String(record.index),
+      node: <ImageFigure record={record} />,
+    }));
   return (
     <section className={`message message-${message.role}`}>
       <div className="message-label">
@@ -28,7 +37,7 @@ export function Message({
         )}
       </div>
       <div className="message-text" dir="auto" data-notebook-message-id={message.id}>
-        <HighlightText text={message.text} highlights={highlights} />
+        <HighlightText text={message.text} highlights={highlights} inserts={inserts} />
       </div>
       {!!highlights.length && (
         <aside className="annotations">

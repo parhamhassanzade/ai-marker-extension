@@ -4,6 +4,13 @@ import { configureNotebookSurface } from './notebookSurface';
 import { matchesHighlightSource } from './sourceAuthorization';
 import { createSourceTabRegistry } from './sourceTabRegistry';
 import { watchOptionalPlatforms } from './optionalPlatforms';
+import { commitImage, imageState, isImageCommand, prepareImage, removeStoredImage } from './images';
+import { platformOf } from '../platforms';
+import { isDatabase } from '../storage/backup';
+import { isImageRecord } from '../storage/archive';
+import { getImageBlob, importImages } from '../storage/indexedDB';
+import { mergeImport } from '../storage/repository';
+import type { ImageRecord } from '../images/types';
 import { LIST_SOURCE_TABS, SOURCE_HELLO } from '../browser/sourceTabs';
 import { isCommand } from '../storage/validation';
 import { STORAGE_KEY } from '../storage/storage';
@@ -71,6 +78,39 @@ async function execute(command: Command): Promise<Result> {
     return {
       ok: false,
       error: error instanceof Error ? error.message : 'Notebook could not be saved.',
+    };
+  }
+}
+async function importBackup(database: Database, images: ImageRecord[]) {
+  try {
+    const db = await loadDatabase();
+    const { next, imported, skipped } = mergeImport(db, database);
+    if (imported.length) await writeDatabase(next, db);
+    const added = new Set(imported);
+    const records: ImageRecord[] = [];
+    for (const image of images) {
+      if (!added.has(image.notebookId)) continue;
+      // The page stored content-addressed blobs first; never trust a missing one.
+      const present = image.status !== 'saved' || !!(await getImageBlob(image.hash!));
+      records.push(
+        present
+          ? image
+          : {
+              ...image,
+              status: 'failed',
+              error: 'Image data was missing from the backup.',
+              hash: undefined,
+            },
+      );
+    }
+    if (records.length) await importImages(records, []);
+    if (imported.length)
+      await notifyViews().catch((error) => console.warn('[AI Notebook] notify failed', error));
+    return { ok: true, data: next, imported: imported.length, skipped };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'The backup could not be imported.',
     };
   }
 }
@@ -171,6 +211,65 @@ extension.runtime.onMessage.addListener((command: unknown, sender, respond) => {
       return true;
     }
   }
+  if (
+    typeof command === 'object' &&
+    command &&
+    'type' in command &&
+    command.type === 'importBackup'
+  ) {
+    const value = command as { database?: unknown; images?: unknown };
+    if (
+      !sender.url?.startsWith(extension.runtime.getURL('/')) ||
+      !isDatabase(value.database) ||
+      !Array.isArray(value.images) ||
+      !value.images.every(isImageRecord)
+    ) {
+      respond({ ok: false, error: 'This backup cannot be imported.' });
+      return false;
+    }
+    const task = queue.then(() =>
+      importBackup(value.database as Database, value.images as ImageRecord[]),
+    );
+    queue = task.catch(() => undefined);
+    void task.then(respond);
+    return true;
+  }
+  if (isImageCommand(command)) {
+    const fromPage = !!sender.url?.startsWith(extension.runtime.getURL('/'));
+    if (
+      (command.type === 'removeImage' && !fromPage) ||
+      (command.type === 'imageState' &&
+        !fromPage &&
+        platformOf(sender.tab?.url ?? sender.url) !== command.platform)
+    ) {
+      respond({ ok: false, error: 'Image management is available in the notebook.' });
+      return false;
+    }
+    const notifyImages = (notebookId: string) =>
+      extension.runtime.sendMessage({ type: 'imagesChanged', notebookId }).catch(() => undefined);
+    void (async () => {
+      if (command.type === 'imageState') return imageState(await loadDatabase(), command);
+      if (command.type === 'removeImage') {
+        const task = queue.then(() => removeStoredImage(command));
+        queue = task.catch(() => undefined);
+        await task;
+        await notifyImages(command.notebookId);
+        return { ok: true };
+      }
+      // Download and re-encode outside the queue; only the write is serialized.
+      const prepared = await prepareImage(command);
+      const task = queue.then(async () =>
+        commitImage(await loadDatabase(), command, sender, prepared),
+      );
+      queue = task.catch(() => undefined);
+      const record = await task;
+      await notifyImages(record.notebookId);
+      return { ok: true, status: record.status, error: record.error };
+    })().then(respond, (error: Error) =>
+      respond({ ok: false, error: error?.message || 'Image couldn’t be saved.' }),
+    );
+    return true;
+  }
   if (isSupportCommand(command)) {
     // Only extension pages may record exports or dismiss the note. Content
     // scripts must not be able to increment this counter or change preferences.
@@ -202,6 +301,7 @@ extension.runtime.onMessage.addListener((command: unknown, sender, respond) => {
     'type' in command &&
     (command.type === 'notebooksChanged' ||
       command.type === 'captureError' ||
+      command.type === 'imagesChanged' ||
       command.type === 'probeNotebookVisibility')
   )
     return false;

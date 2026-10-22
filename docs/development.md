@@ -22,6 +22,7 @@ CI runs on pushes and pull requests using Node 24 on Ubuntu, including a headles
 Additional checks:
 
 - `npm run test:persian`: Persian PDF browser download.
+- `npm run test:large`: a 150-turn ChatGPT chat with an answer over the structured-content budget (a 3,000-line highlighted code block). Checks capture, on-page highlights with notes before and after streaming, and reports toolbar latency and main-thread long tasks. `TURNS` changes the size; `EXTENSION_DIR` tests another build.
 - `npm run test:claude`: claude.ai capture against a synthetic fixture, using a package copy with Claude access pre-granted (the browser permission prompt cannot be automated). Covers dynamic content-script registration, notebook connection, rich capture, and on-page highlights.
 - `npm run test:arc`: shared Chromium distribution, including actual side-panel opening, silent/rejected API fallback, saved surface choice, and persistent window; native Arc UI still needs manual verification.
 - `npm run test:firefox`: actual headless Firefox with a temporary add-on and local HTTPS fixture. Requires OpenSSL and geckodriver; defaults to `/Applications/Firefox.app/Contents/MacOS/firefox`, overridable with `FIREFOX_BINARY`.
